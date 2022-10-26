@@ -23,3 +23,23 @@ func TestHandIsEmpty(t *testing.T) {
 		}
 	}
 }
+
+func TestHandEqual(t *testing.T) {
+	hand := Hand{EmptyCard, EmptyCard}
+	notEqual := [3]Hand{
+		Hand{EmptyCard, DukeCard},
+		Hand{DukeCard, EmptyCard},
+		Hand{AssassinCard, ContessaCard},
+	}
+	equal := Hand{EmptyCard, EmptyCard}
+	
+	for _, v := range notEqual {
+		if v.Equal(hand) {
+			t.Fatalf("hand shouldn't equal other hand: %v, %v", v, hand)
+		}
+	}
+	
+	if !equal.Equal(hand) {
+		t.Fatalf("hand should equal other hand: %v, %v", equal, hand)
+	}
+}

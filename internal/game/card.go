@@ -1,10 +1,14 @@
 package game
 
 const (
-	EmptyCard uint8 = iota
-	AssassinCard
-	DukeCard
-	AmbassadorCard
-	CaptainCard
-	ContessaCard
+	CardEmpty uint8 = iota
+	CardAssassin
+	CardDuke
+	CardAmbassador
+	CardCaptain
+	CardContessa
 )
+
+func IsValidCard(v uint8) bool {
+	return v >= CardAssassin && v <= CardContessa
+}

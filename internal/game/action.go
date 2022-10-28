@@ -1,5 +1,12 @@
 package game
 
+const (
+	ActionIncome uint8 = iota + 1
+	ActionFinancialAid
+	ActionCoup
+	ActionClaim
+)
+
 func IncomeAction(coins uint8) uint8 {
 	if coins == 10 {
 		return coins
@@ -23,7 +30,7 @@ func CoupAction(coins uint8, place uint8, hand Hand) (uint8, Hand) {
 	
 	coins = coins - 7
 	newHand := Hand{hand[0], hand[1]}
-	newHand[place] = EmptyCard
+	newHand[place] = CardEmpty
 
 	return coins, newHand
 }
@@ -35,7 +42,7 @@ func AssassinAction(coins uint8, place uint8, hand Hand) (uint8, Hand) {
 
 	coins = coins - 3
 	newHand := Hand{hand[0], hand[1]}
-	newHand[place] = EmptyCard
+	newHand[place] = CardEmpty
 
 	return coins, newHand
 }
@@ -73,4 +80,9 @@ func AmbassadorAction(places [2]uint8, currentHand Hand, nextHand Hand) Hand {
 	}
 	
 	return newHand
+}
+
+type Action struct {
+	author *Player
+	action uint8
 }

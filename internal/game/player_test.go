@@ -10,13 +10,13 @@ func TestPlayerIsDead(t *testing.T) {
 		t.Fatalf("player should be dead but isn't")
 	}
 	
-	p.Hand[0] = DukeCard
+	p.Hand[0] = CardDuke
 	if !p.IsDead() {
 		t.Fatalf("player can be revived if his hand changed")
 	}
 	
 	p = &Player{}
-	p.Hand[0] = AssassinCard
+	p.Hand[0] = CardAssassin
 	
 	if p.IsDead() {
 		t.Fatalf("non empty hand makes a player dead...")

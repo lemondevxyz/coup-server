@@ -5,16 +5,16 @@ import (
 )
 
 func TestHandIsEmpty(t *testing.T) {
-	empty := Hand{EmptyCard, EmptyCard}
+	empty := Hand{CardEmpty, CardEmpty}
 	
 	if !empty.IsEmpty() {
 		t.Fatalf("the empty hand is non-empty")
 	}
 	
 	nonEmpty := [3]Hand{
-		Hand{EmptyCard, DukeCard},
-		Hand{DukeCard, EmptyCard},
-		Hand{DukeCard, DukeCard},
+		Hand{CardEmpty, CardDuke},
+		Hand{CardDuke, CardEmpty},
+		Hand{CardDuke, CardDuke},
 	}
 	
 	for _, v := range nonEmpty {
@@ -25,13 +25,13 @@ func TestHandIsEmpty(t *testing.T) {
 }
 
 func TestHandEqual(t *testing.T) {
-	hand := Hand{EmptyCard, EmptyCard}
+	hand := Hand{CardEmpty, CardEmpty}
 	notEqual := [3]Hand{
-		Hand{EmptyCard, DukeCard},
-		Hand{DukeCard, EmptyCard},
-		Hand{AssassinCard, ContessaCard},
+		Hand{CardEmpty, CardDuke},
+		Hand{CardDuke, CardEmpty},
+		Hand{CardAssassin, CardContessa},
 	}
-	equal := Hand{EmptyCard, EmptyCard}
+	equal := Hand{CardEmpty, CardEmpty}
 	
 	for _, v := range notEqual {
 		if v.Equal(hand) {

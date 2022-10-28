@@ -34,7 +34,7 @@ func NewClaim(player *Player, character uint8) (*Claim, error) {
 	return c, nil
 }
 
-func (c Claim) IsValid() error {
+func (c *Claim) IsValid() error {
 	if c.author == nil || c.author.IsDead() {
 		return ErrInvalidPlayer
 	}
@@ -62,7 +62,7 @@ func (c *Claim) Wait() {
 	})
 }
 
-func (c Claim) Finished() bool {
+func (c *Claim) Finished() bool {
 	if c.succeed != nil || c.challenge != nil {
 		return true
 	}

@@ -1,47 +1,34 @@
 package game
 
-import "testing"
+import (
+	"testing"
+	"github.com/matryer/is"
+)
 
 func TestNextTurn(t *testing.T) {
-	if nextTurn(0, 0) != -1 {
-		t.Fatalf("nextTurn(0, 0) != -1")
-	}
-	
-	if nextTurn(0, 1) != 0 {
-		t.Fatalf("nextTurn(0, 1) = %d", nextTurn(0, 1))
-	}
-	
-	if nextTurn(1, 3) != 2 {
-		t.Fatalf("nextTurn(1, 3) != 2")
-	}
-	
-	if nextTurn(2, 3) != 0 {
-		t.Fatalf("nextTurn(2, 3) != 0")
-	}
+	is := is.New(t)
+	is.Equal(nextTurn(0, 0), -1)
+	is.Equal(nextTurn(0, 1), 0)
+	is.Equal(nextTurn(1, 3), 2)
+	is.Equal(nextTurn(2, 3), 0)
 }
 
 func TestAddClaim(t *testing.T) {
 	c := &Claim{}
 	_, err := addClaim([]*Claim{}, c)
-	if err != c.IsValid() {
-		t.Fatalf("addClaim doesn't check for underlying claim validaity %v", err)
-	}
+	
+	is := is.New(t)
+	is.Equal(err, c.IsValid())
 	
 	player := &Player{Hand: Hand{CardAssassin, CardContessa}}
 	c, err = NewClaim(player, CardAssassin)
-	if err != nil {
-		t.Fatalf("NewClaim: %v", err)
-	}
+	is.NoErr(err)
 	
 	newc, err := NewClaim(player, CardAssassin)
-	if err != nil {
-		t.Fatalf("NewClaim: %v", err)
-	}
+	is.NoErr(err)
 	
 	_, err = addClaim([]*Claim{c}, newc)
-	if err != ErrInvalidCounterClaim {
-		t.Fatalf("addClaim: %v", err)
-	}
+	is.Equal(err, ErrInvalidCounterClaim)
 }
 
 func TestGameNextTurn(t *testing.T) {
@@ -51,25 +38,19 @@ func TestGameNextTurn(t *testing.T) {
 	g.turn = 0
 	
 	g.NextTurn()
-	if g.turn != 1 {
-		t.Fatalf("Game.NextTurn doesn't change the turn field")
-	}
+
+	is := is.New(t)
+	is.Equal(g.turn, 1)
 }
 
 func TestGameClaim(t *testing.T) {
 	g := &Game{}
 	g.claims = []*Claim{}
 	
-	if err := g.Claim(&Claim{}); err == nil {
-		t.Fatalf("Game.Claim should return nil")
-	}
+	is := is.New(t)
+	is.True(g.Claim(&Claim{}) != nil)
 	
 	c, err := NewClaim(&Player{Hand: Hand{0: CardContessa}}, CardContessa)
-	if err != nil {
-		t.Fatalf("bad test: NewClaim: %s", err.Error())
-	}
-	
-	if err = g.Claim(c); err != nil {
-		t.Fatalf("Game.Claim: %s", err.Error())
-	}
+	is.NoErr(err)
+	is.NoErr(g.Claim(c))
 }

@@ -3,57 +3,44 @@ package game
 import (
 	"testing"
 	"time"
+
+	"github.com/matryer/is"
 )
 
 func TestIsValidCounterClaim(t *testing.T) {
-	if !IsValidCounterClaim(CardAssassin, CardContessa) {
-		t.Fatalf("Assassin should be countered by Contessa")
-	}
-	
-	if !IsValidCounterClaim(CardCaptain, CardAmbassador) ||
-				!IsValidCounterClaim(CardCaptain, CardCaptain) {
-		t.Fatalf("Captain should be countered by an Ambassador or a Captain")
-	}
-	
-	if IsValidCounterClaim(CardContessa, CardAssassin) {
-		t.Fatalf("A Contessa cannot be countered by an assassin")
-	}
+	is := is.New(t)
+	is.Equal(IsValidCounterClaim(CardAssassin, CardContessa), true)
+	is.Equal(IsValidCounterClaim(CardCaptain, CardCaptain), true)
+	is.Equal(IsValidCounterClaim(CardCaptain, CardAmbassador), true)
+	is.Equal(IsValidCounterClaim(CardContessa, CardAssassin), false)
 }
 
 func TestClaimValid(t *testing.T) {
+	is := is.New(t)
 	c := Claim{author: &Player{Hand: Hand{CardAssassin, CardEmpty}}, character: CardAssassin}
-	if err := c.IsValid(); err != nil {
-		t.Fatalf("new claim should work")
-	}
-	
+	is.NoErr(c.IsValid())
 	c.author = &Player{}
-	if err := c.IsValid(); err != ErrInvalidPlayer {
-		t.Fatalf("Claim.IsValid() doesn't check if player is dead or not: %v", err)
-	}
-	
+	is.Equal(c.IsValid(), ErrInvalidPlayer)
 	c.author = &Player{Hand: Hand{CardEmpty, CardAssassin}}
 	c.character = 0
-	if err := c.IsValid(); err != ErrInvalidCharacter {
-		t.Fatalf("Claim.IsValid() doesn't check if character is invalid or not: %v", err)
-	}
+	is.Equal(c.IsValid(), ErrInvalidCharacter)
 }
 
 func TestNewClaim(t *testing.T) {
-	if _, err := NewClaim(nil, 0); err == nil {
-		t.Fatalf("NewClaim should return err because Claim is invalid")
-	}
+	is := is.New(t)
+	_, err := NewClaim(nil, 0)
+	is.True(err != nil)
 }
 
 func TestClaimFinished(t *testing.T) {
+	is := is.New(t)
 	c := &Claim{}
-	if c.Finished() {
-		t.Fatalf("claim shouldn't be finished")
-	}
 	
+	is.Equal(c.Finished(), false)
 	pntr := false
-	if (Claim{succeed: &pntr}).Finished() == false || (Claim{challenge: &pntr}).Finished() == false {
-		t.Fatalf("Claim.Finished doesn't account for either challenge field or succeed field")
-	}
+	
+	is.Equal((&Claim{succeed: &pntr}).Finished(), true)
+	is.Equal((&Claim{challenge: &pntr}).Finished(), true)
 }
 
 func TestClaimWait(t *testing.T) {
@@ -64,32 +51,31 @@ func TestClaimWait(t *testing.T) {
 		c.wg.Done()
 		close(v)
 	}()
-	
+
 	c.Wait()
 	<-v
+	
+	is := is.New(t)
+	is.True(c.waitCalled)
 }
 
 func TestClaimPassOrChallenge(t *testing.T) {
+	is := is.New(t)
+	
 	c := &Claim{}
 	c.waitCalled = true
 	c.wg.Add(1)
-	
+
 	var val *bool
 	go func() {
 		time.Sleep(time.Millisecond)
 		val = c.passOrChallenge()
 	}()
 	c.wg.Wait()
-	
-	if val == nil {
-		t.Fatalf("challenge is not set..")
-	}
-	
-	b := false
-	c.challenge = &b
-	if val := c.passOrChallenge(); val != nil {
-		t.Fatalf("Claim has already finished but passOrChallenge() returns non-nil: %v", val)
-	}
+
+	is.True(val != nil)
+	c.challenge = val
+	is.True(c.passOrChallenge() == nil)
 }
 
 func TestClaimPassOrChallengeWait(t *testing.T) {
@@ -103,36 +89,32 @@ func TestClaimPassOrChallengeWait(t *testing.T) {
 
 func TestClaimChallenge(t *testing.T) {
 	c := &Claim{}
-		go func() {
+	go func() {
 		time.Sleep(time.Millisecond)
 		c.Challenge()
 	}()
 	c.Wait()
-	
-	if c.challenge == nil {
-		t.Fatalf("Challenge() doesn't set field challenge")
-	}
-	
+
+	is := is.New(t)
+	is.True(c.challenge != nil)
+
 	c.Challenge()
-	if c.passOrChallenge() == nil && c.challenge == nil {
-		t.Fatalf("Challenge() sets challenge to nil once passOrChallenge is nil")
-	}
+	is.True(c.passOrChallenge() == nil)
+	is.True(c.challenge != nil)
 }
 
 func TestClaimPass(t *testing.T) {
 	c := &Claim{}
-		go func() {
+	go func() {
 		time.Sleep(time.Millisecond)
 		c.Pass()
 	}()
 	c.Wait()
-	
-	if c.succeed == nil {
-		t.Fatalf("Challenge() doesn't set field challenge")
-	}
-	
+
+	is := is.New(t)
+	is.True(c.succeed != nil)
+
 	c.Pass()
-	if c.passOrChallenge() == nil && c.succeed == nil {
-		t.Fatalf("Challenge() sets challenge to nil once passOrChallenge is nil")
-	}
+	is.True(c.passOrChallenge() == nil)
+	is.True(c.succeed != nil)
 }

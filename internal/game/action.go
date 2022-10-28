@@ -82,7 +82,9 @@ func AmbassadorAction(places [2]uint8, currentHand Hand, nextHand Hand) Hand {
 	return newHand
 }
 
+/*
 type Action struct {
 	author *Player
 	action uint8
 }
+*/

@@ -2,23 +2,19 @@ package game
 
 import (
 	"testing"
+	"github.com/matryer/is"
 )
 
 func TestPlayerIsDead(t *testing.T) {
+	is := is.New(t)
 	p := &Player{}
-	if !p.IsDead() {
-		t.Fatalf("player should be dead but isn't")
-	}
+	is.True(p.IsDead())
 	
 	p.Hand[0] = CardDuke
-	if !p.IsDead() {
-		t.Fatalf("player can be revived if his hand changed")
-	}
+	is.True(p.IsDead())
 	
 	p = &Player{}
 	p.Hand[0] = CardAssassin
 	
-	if p.IsDead() {
-		t.Fatalf("non empty hand makes a player dead...")
-	}
+	is.True(!p.IsDead())
 }

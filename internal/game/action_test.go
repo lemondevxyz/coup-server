@@ -2,207 +2,162 @@ package game
 
 import (
 	"testing"
+	"github.com/matryer/is"
+//	"fmt"
 )
 
 func TestIncomeAction(t *testing.T) {
-	if IncomeAction(0) != 1 {
-		t.Fatalf("Income doesn't give one coin")
-	}
-
-	if IncomeAction(10) == 11 {
-		t.Fatalf("Income doesn't stop at 10")
-	}
+	is := is.New(t)
+	is.Equal(IncomeAction(0), uint8(1))
+	is.Equal(IncomeAction(10), uint8(10))
 }
 
 func TestFinancialAidAction(t *testing.T) {
-	if FinancialAidAction(0) != 2 {
-		t.Fatalf("FinancialAid doesn't give two coins")
-	}
-
-	if FinancialAidAction(10) != 10 {
-		t.Fatalf("FinancialAid doesn't stop at 10")
-	}
+	is := is.New(t)
+	is.Equal(FinancialAidAction(0), uint8(2))
+	is.Equal(FinancialAidAction(10), uint8(10))
 }
 
 func TestDukeAction(t *testing.T) {
-	if DukeAction(0) != 3 {
-		t.Fatalf("DukeAction doesn't give three coins")
-	}
+	is := is.New(t)
+	is.Equal(DukeAction(0), uint8(3))
+	is.Equal(DukeAction(10), uint8(10))
+}
 
-	if DukeAction(10) != 10 {
-		t.Fatalf("DukeAction doesn't stop at 10")
+func isEmpty(coins *uint8, hand *Hand) func(uint8, Hand) bool {
+	return func(newCoins uint8, newHand Hand) bool {
+		return *coins == newCoins && hand.IsEqual(newHand)
 	}
 }
 
+func onlyHand(coins uint8, hand Hand) Hand {	return hand }
+
 func TestCoupAction(t *testing.T) {
-	coins, place, hand := uint8(3), uint8(0), Hand{CardDuke, CardContessa}
-
-	isEmpty := func() bool {
-		newCoins, newHand := CoupAction(coins, place, hand)
-
-		if coins == newCoins && hand[0] == newHand[0] && hand[1] == newHand[1] {
-			return true
-		}
-
-		return false
-	}
-
-	coins = 0
+	coinsVal := uint8(3)
+	coins, place, hand := &coinsVal, uint8(0), Hand{CardDuke, CardContessa}
+	
+	is := is.New(t)
+	isEmpty := isEmpty(coins, &hand)
+	
+	*coins = 0
+	
 	for i := 0; i < 3; i++ {
 		switch i {
 		case 0:
-			coins = uint8(0)
+			*coins = uint8(0)
 		case 1:
-			coins = uint8(7)
+			*coins = uint8(7)
 			place = uint8(2)
 		case 2:
 			place = uint8(0)
-			hand = Hand{CardEmpty, CardEmpty}
+			hand[0], hand[1] = CardEmpty, CardEmpty
 		}
-		if !isEmpty() {
-			t.Fatalf("bad parameters still yield the action; %d %d %v", coins, place, hand)
-		}
+		is.True(isEmpty(CoupAction(*coins, place, hand)))
 	}
-
+//asd
 	hand = Hand{CardDuke, CardContessa}
-	if isEmpty() {
-		t.Log("for reference: coins must be 3 or more, place needs to be more than 1, hand must not be empty")
-		t.Fatalf("good parameters but no action; %d %d %v", coins, place, hand)
-	}
+	is.True(!isEmpty(CoupAction(*coins, place, hand)))
 
-	if !hand.Equal(Hand{CardDuke, CardContessa}) {
-		t.Fatalf("CoupAction mutates the underlying hand")
-	}
-	
-	if _, newHand := CoupAction(coins, place, hand); newHand[0] != CardEmpty {
-		t.Fatalf("CoupAction doesn't actually kill a card")
-	}
-	
-	if _, newHand := CoupAction(coins, 1, hand); newHand[1] != CardEmpty {
-		t.Fatalf("CoupAction doesn't actually kill a card")
-	}
+	is.True(hand.IsEqual(Hand{CardDuke, CardContessa}))
+	is.Equal(onlyHand(CoupAction(*coins, 0, hand))[0], CardEmpty)
+	is.Equal(onlyHand(CoupAction(*coins, 1, hand))[1], CardEmpty)
 }
 
 func TestAssassinAction(t *testing.T) {
-	coins, place, hand := uint8(3), uint8(0), Hand{CardDuke, CardContessa}
+	coinsVal := uint8(3)
+	coins, place, hand := &coinsVal, uint8(0), Hand{CardDuke, CardContessa}
 
-	isEmpty := func() bool {
-		newCoins, newHand := AssassinAction(coins, place, hand)
-
-		if coins == newCoins && hand[0] == newHand[0] && hand[1] == newHand[1] {
-			return true
-		}
-
-		return false
-	}
-
-	coins = 0
+	isEmpty := isEmpty(coins, &hand)
+	
+	is := is.New(t)
+	*coins = 0
 	for i := 0; i < 3; i++ {
 		switch i {
 		case 0:
-			coins = uint8(0)
+			*coins = uint8(0)
 		case 1:
-			coins = uint8(3)
+			*coins = uint8(3)
 			place = uint8(2)
 		case 2:
 			place = uint8(0)
-			hand = Hand{CardEmpty, CardEmpty}
+			hand[0], hand[1] = CardEmpty, CardEmpty
 		}
-		if !isEmpty() {
-			t.Fatalf("bad parameters still yield the action; %d %d %v", coins, place, hand)
-		}
+		is.True(isEmpty(AssassinAction(*coins, place, hand)))
 	}
 
 	hand = Hand{CardDuke, CardContessa}
-	if isEmpty() {
-		t.Log("for reference: coins must be 3 or more, place needs to be more than 1, hand must not be empty")
-		t.Fatalf("good parameters but no action; %d %d %v", coins, place, hand)
-	}
+	is.True(!isEmpty(AssassinAction(*coins, place, hand)))
 
-	if !hand.Equal(Hand{CardDuke, CardContessa}) {
-		t.Fatalf("AssassinAction mutates the underlying hand")
-	}
+	is.True(hand.IsEqual(Hand{CardDuke, CardContessa}))
+	_, newHand := AssassinAction(*coins, place, hand)
+	is.Equal(newHand[0], CardEmpty)
 	
-	if _, newHand := AssassinAction(coins, place, hand); newHand[0] != CardEmpty {
-		t.Fatalf("CoupAction doesn't actually kill a card")
-	}
-	
-	if _, newHand := AssassinAction(coins, 1, hand); newHand[1] != CardEmpty {
-		t.Fatalf("CoupAction doesn't actually kill a card")
-	}
+	_, newHand = AssassinAction(*coins, 1, hand)
+	is.Equal(newHand[1], CardEmpty)
 }
 
 func TestCaptainAction(t *testing.T) {
+	is := is.New(t)
 	coins, other := CaptainAction(2, 0)
-	if coins != 2 || other != 0 {
-		t.Fatalf("CaptainAction doesn't stop stealing at 0 coins: %v, %v", coins, other)
-	}
+	is.True(coins == 2)
+	is.True(other == 0)
 
 	coins, other = CaptainAction(2, 1)
-	if coins != 3 || other != 0 {
-		t.Fatalf("CaptainAction doesn't steal only one coin because the player doesn't have more: %v, %v", coins, other)
-	}
+	is.True(coins == 3)
+	is.True(other == 0)
 
 	coins, other = CaptainAction(2, 2)
-	if coins != 4 || other != 0 {
-		t.Fatalf("CaptainAction doesn't steal 2 coins when the player has 2 coins: %v, %v", coins, other)
-	}
+	is.True(coins == 4)
+	is.True(other == 0)
 
 	coins, other = CaptainAction(4, 3)
-	if coins != 6 || other != 1 {
-		t.Fatalf("CaptainAction doesn't steal 2 coins when the player has more than 2 coins: %v, %v", coins, other)
-	}
+	is.True(coins == 6)
+	is.True(other == 1)
 }
 
 func TestAmbassadorAction(t *testing.T) {
 	currentHand := Hand{CardAmbassador, CardContessa}
 	nextHand := Hand{CardDuke, CardAssassin}
-
-	// 2, 1
-	want := Hand{currentHand[0], nextHand[1]}
-	if !want.Equal(AmbassadorAction([2]uint8{2, 1}, currentHand, nextHand)) {
-		t.Fatalf("AmbassadorAction doesn't swap out the second card from the current hand to the second card from the next hand. %v, %v, %v", [2]uint8{2, 1}, currentHand, nextHand)
+	
+	is := is.New(t)
+	
+	want := Hand{currentHand[0], currentHand[1]}
+	isEqual := func(one, two uint8) {
+		is.Equal(want, AmbassadorAction([2]uint8{one, two}, currentHand, nextHand))
 	}
-
-	if !currentHand.Equal(Hand{CardAmbassador, CardContessa}) {
-		t.Fatalf("AmbassadorAction modifies the underlying hand")
-	}
+	
+	// 2, 1	
+	isEqual(2, 2)
+	// must not mutate
+	is.Equal(currentHand, Hand{CardAmbassador, CardContessa})
 
 	// 0, 1
 	want = Hand{nextHand[0], nextHand[1]}
-
-	if !want.Equal(AmbassadorAction([2]uint8{0, 1}, currentHand, nextHand)) {
-		t.Fatalf("first and second card from the first hand should be swapped with their counterparts in the second hand: %v, %v, %v", [2]uint8{0, 1}, currentHand, nextHand)
-	}
+	//is.Equal(want, AmbassadorAction([2]uint8{0, 1}, currentHand, nextHand))
+	isEqual(0, 1)
 
 	// 0, 2
 	want = Hand{nextHand[0], currentHand[1]}
-	if !want.Equal(AmbassadorAction([2]uint8{0, 2}, currentHand, nextHand)) {
-		t.Fatalf("first card from the first hand should be swapped with the first card from the second hand")
-	}
+	isEqual(0, 2)
 
 	// 1, 2
 	want = Hand{nextHand[1], currentHand[1]}
-	if !want.Equal(AmbassadorAction([2]uint8{1, 2}, currentHand, nextHand)) {
-		t.Fatalf("first card from the first hand should be swapped with the second card from the second hand")
-	}
+	isEqual(1, 2)
 
 	// 1, 1
 	want = currentHand
-	if !want.Equal(AmbassadorAction([2]uint8{1, 1}, currentHand, nextHand)) {
-		t.Fatalf("nothing should happen but it does; because swapping two cards with the same card induces duplicate cards")
-	}
+	isEqual(1, 1)
+	
+	// 1, 0
+	want = Hand{nextHand[1], nextHand[0]}
+	isEqual(1, 0)
 
 	// 2, 1
 	want = Hand{currentHand[0], nextHand[1]}
-	if !want.Equal(AmbassadorAction([2]uint8{2, 1}, currentHand, nextHand)) {
-		t.Fatalf("second card from the first hand should be swapped with its countepart from the second hand")
-	}
+	isEqual(2, 1)
 
 	// 2, 0
 	want = Hand{currentHand[0], nextHand[0]}
-	if !want.Equal(AmbassadorAction([2]uint8{2, 0}, currentHand, nextHand)) {
-		t.Fatalf("second card from the first hand should be swapped with the first card in the second hand")
-	}
+	isEqual( 2,0)
 
 }

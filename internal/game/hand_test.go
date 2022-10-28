@@ -2,14 +2,14 @@ package game
 
 import (
 	"testing"
+	"github.com/matryer/is"
 )
 
 func TestHandIsEmpty(t *testing.T) {
+	is := is.New(t)
 	empty := Hand{CardEmpty, CardEmpty}
 	
-	if !empty.IsEmpty() {
-		t.Fatalf("the empty hand is non-empty")
-	}
+	is.True(empty.IsEmpty())
 	
 	nonEmpty := [3]Hand{
 		Hand{CardEmpty, CardDuke},
@@ -18,13 +18,12 @@ func TestHandIsEmpty(t *testing.T) {
 	}
 	
 	for _, v := range nonEmpty {
-		if v.IsEmpty() {
-			t.Fatalf("non-empty hand is empty: %v", v)
-		}
+		is.True(!v.IsEmpty())
 	}
 }
 
 func TestHandEqual(t *testing.T) {
+	is := is.New(t)
 	hand := Hand{CardEmpty, CardEmpty}
 	notEqual := [3]Hand{
 		Hand{CardEmpty, CardDuke},
@@ -34,12 +33,8 @@ func TestHandEqual(t *testing.T) {
 	equal := Hand{CardEmpty, CardEmpty}
 	
 	for _, v := range notEqual {
-		if v.Equal(hand) {
-			t.Fatalf("hand shouldn't equal other hand: %v, %v", v, hand)
-		}
+		is.True(!v.IsEqual(hand))
 	}
 	
-	if !equal.Equal(hand) {
-		t.Fatalf("hand should equal other hand: %v, %v", equal, hand)
-	}
+	is.Equal(equal, hand)
 }

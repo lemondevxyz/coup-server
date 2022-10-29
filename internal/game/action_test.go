@@ -2,8 +2,9 @@ package game
 
 import (
 	"testing"
+
 	"github.com/matryer/is"
-//	"fmt"
+	//	"fmt"
 )
 
 func TestIncomeAction(t *testing.T) {
@@ -30,17 +31,17 @@ func isEmpty(coins *uint8, hand *Hand) func(uint8, Hand) bool {
 	}
 }
 
-func onlyHand(coins uint8, hand Hand) Hand {	return hand }
+func onlyHand(coins uint8, hand Hand) Hand { return hand }
 
 func TestCoupAction(t *testing.T) {
 	coinsVal := uint8(3)
 	coins, place, hand := &coinsVal, uint8(0), Hand{CardDuke, CardContessa}
-	
+
 	is := is.New(t)
 	isEmpty := isEmpty(coins, &hand)
-	
+
 	*coins = 0
-	
+
 	for i := 0; i < 3; i++ {
 		switch i {
 		case 0:
@@ -54,7 +55,7 @@ func TestCoupAction(t *testing.T) {
 		}
 		is.True(isEmpty(CoupAction(*coins, place, hand)))
 	}
-//asd
+	//asd
 	hand = Hand{CardDuke, CardContessa}
 	is.True(!isEmpty(CoupAction(*coins, place, hand)))
 
@@ -68,7 +69,7 @@ func TestAssassinAction(t *testing.T) {
 	coins, place, hand := &coinsVal, uint8(0), Hand{CardDuke, CardContessa}
 
 	isEmpty := isEmpty(coins, &hand)
-	
+
 	is := is.New(t)
 	*coins = 0
 	for i := 0; i < 3; i++ {
@@ -91,7 +92,7 @@ func TestAssassinAction(t *testing.T) {
 	is.True(hand.IsEqual(Hand{CardDuke, CardContessa}))
 	_, newHand := AssassinAction(*coins, place, hand)
 	is.Equal(newHand[0], CardEmpty)
-	
+
 	_, newHand = AssassinAction(*coins, 1, hand)
 	is.Equal(newHand[1], CardEmpty)
 }
@@ -118,15 +119,15 @@ func TestCaptainAction(t *testing.T) {
 func TestAmbassadorAction(t *testing.T) {
 	currentHand := Hand{CardAmbassador, CardContessa}
 	nextHand := Hand{CardDuke, CardAssassin}
-	
+
 	is := is.New(t)
-	
+
 	want := Hand{currentHand[0], currentHand[1]}
 	isEqual := func(one, two uint8) {
 		is.Equal(want, AmbassadorAction([2]uint8{one, two}, currentHand, nextHand))
 	}
-	
-	// 2, 1	
+
+	// 2, 1
 	isEqual(2, 2)
 	// must not mutate
 	is.Equal(currentHand, Hand{CardAmbassador, CardContessa})
@@ -147,7 +148,7 @@ func TestAmbassadorAction(t *testing.T) {
 	// 1, 1
 	want = currentHand
 	isEqual(1, 1)
-	
+
 	// 1, 0
 	want = Hand{nextHand[1], nextHand[0]}
 	isEqual(1, 0)
@@ -158,6 +159,92 @@ func TestAmbassadorAction(t *testing.T) {
 
 	// 2, 0
 	want = Hand{currentHand[0], nextHand[0]}
-	isEqual( 2,0)
+	isEqual(2, 0)
+}
+
+func TestActionDo(t *testing.T) {
+	player := &Player{}
+
+	a := &Action{Kind: ActionIncome, author: player}
+	a.Do()
+
+	is := is.New(t)
+	is.Equal(player.Coins, uint8(1))
+
+	a.Kind = ActionCoup
+
+	target := &Player{Hand: Hand{0: CardAssassin}}
+
+	player.Coins = 7
+
+	a.Kind = ActionCoup
+	a.against = target
+
+	val := uint8(0)
+
+	coins, hand := CoupAction(player.Coins, val, target.Hand)
+	a.AssassinPlace = &val
+	a.Do()
+
+	is.Equal(target.Hand, hand)
+	is.Equal(player.Coins, coins)
+
+	a.Kind = ActionFinancialAid
+	a.Do()
+	is.Equal(player.Coins, uint8(2))
+
+	// Character specific tests
+	a.Kind = ActionCharacter
+	a.author = player
+	a.against = target
+	// Duke
+	{
+		a.Character = CardDuke
+		coins := uint8(0)
+
+		player.Coins = coins
+		a.Do()
+		is.Equal(player.Coins, DukeAction(coins))
+	}
+	// Assassin
+	{
+		target.Hand[0] = CardAssassin
+		a.Character = CardAssassin
+		player.Coins = 3
+		coins, hand := AssassinAction(player.Coins, 0, target.Hand)
+
+		val := uint8(0)
+
+		a.AssassinPlace = &val
+		a.Do()
+
+		is.Equal(target.Hand, hand)
+		is.Equal(player.Coins, coins)
+	}
+	// Captain
+	{
+		player.Coins = 0
+		target.Coins = 2
+		pCoins, tCoins := CaptainAction(player.Coins, target.Coins)
+
+		a.Character = CardCaptain
+		a.Do()
+
+		is.Equal(pCoins, player.Coins)
+		is.Equal(tCoins, target.Coins)
+	}
+	// Ambassador
+	{
+		hand := Hand{0: CardContessa, 1: CardDuke}
+		places := Hand{0: 0, 1: 1}
+
+		newHand := AmbassadorAction(places, player.Hand, hand)
+		a.Character = CardAmbassador
+		a.AmbassadorPlace = places
+		a.AmbassadorHand = hand
+		a.Do()
+
+		is.Equal(player.Hand, newHand)
+	}
 
 }

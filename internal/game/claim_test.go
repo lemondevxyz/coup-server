@@ -32,15 +32,15 @@ func TestNewClaim(t *testing.T) {
 	is.True(err != nil)
 }
 
-func TestClaimFinished(t *testing.T) {
+func TestClaimIsFinished(t *testing.T) {
 	is := is.New(t)
 	c := &Claim{}
-	
-	is.Equal(c.Finished(), false)
+
+	is.Equal(c.IsFinished(), false)
 	pntr := false
-	
-	is.Equal((&Claim{succeed: &pntr}).Finished(), true)
-	is.Equal((&Claim{challenge: &pntr}).Finished(), true)
+
+	is.Equal((&Claim{succeed: &pntr}).IsFinished(), true)
+	is.Equal((&Claim{challenge: &pntr}).IsFinished(), true)
 }
 
 func TestClaimWait(t *testing.T) {
@@ -54,14 +54,16 @@ func TestClaimWait(t *testing.T) {
 
 	c.Wait()
 	<-v
-	
+
 	is := is.New(t)
 	is.True(c.waitCalled)
+
+	c.Wait()
 }
 
 func TestClaimPassOrChallenge(t *testing.T) {
 	is := is.New(t)
-	
+
 	c := &Claim{}
 	c.waitCalled = true
 	c.wg.Add(1)
@@ -117,4 +119,50 @@ func TestClaimPass(t *testing.T) {
 	c.Pass()
 	is.True(c.passOrChallenge() == nil)
 	is.True(c.succeed != nil)
+}
+
+func TestClaimResults(t *testing.T) {
+	c := &Claim{}
+	is := is.New(t)
+
+	passed, challenge := c.Results()
+
+	is.Equal(passed, nil)
+	is.Equal(challenge, nil)
+
+	b := false
+	c.succeed = &b
+
+	passed, _ = c.Results()
+	is.True(passed != c.succeed)
+	is.True(*passed == false)
+
+	b2 := false
+	c.challenge = &b2
+
+	passed, challenge = c.Results()
+	is.True(challenge != passed)
+	is.True(challenge != c.challenge)
+	is.True(*challenge == false)
+}
+
+func TestClaimChan(t *testing.T) {
+	c := &Claim{}
+
+	go func() {
+		time.Sleep(time.Millisecond)
+		c.Challenge()
+	}()
+
+	<-c.Chan()
+	//asd
+
+	c.challenge = nil
+	<-c.Chan()
+
+	v := false
+	c.challenge = &v
+
+	is := is.New(t)
+	is.Equal(c.Chan(), nil)
 }

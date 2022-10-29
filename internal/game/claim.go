@@ -49,20 +49,47 @@ func (c *Claim) IsValid() error {
 func (c *Claim) Wait() {
 	c.once.Do(func() {
 		c.mtx.Lock()
-		if c.waitCalled {
-			c.mtx.Unlock()
-			return
-		}
-	
+
 		c.wg.Add(1)
 		c.waitCalled = true
 		c.mtx.Unlock()
-	
+
 		c.wg.Wait()
 	})
 }
 
-func (c *Claim) Finished() bool {
+func (c *Claim) Chan() chan struct{} {
+	if c.IsFinished() {
+		return nil
+	}
+
+	ch := make(chan struct{})
+	go func(c *Claim, ch chan struct{}) {
+		c.Wait()
+		close(ch)
+	}(c, ch)
+
+	return ch
+}
+
+func (c *Claim) Results() (passed *bool, challenge *bool) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	if c.succeed != nil {
+		val := *c.succeed
+		passed = &val
+	}
+
+	if c.challenge != nil {
+		val := *c.challenge
+		challenge = &val
+	}
+
+	return
+}
+
+func (c *Claim) IsFinished() bool {
 	if c.succeed != nil || c.challenge != nil {
 		return true
 	}
@@ -73,7 +100,7 @@ func (c *Claim) Finished() bool {
 func (c *Claim) passOrChallenge() *bool {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
-	if c.Finished() {
+	if c.IsFinished() {
 		return nil
 	}
 	b := true

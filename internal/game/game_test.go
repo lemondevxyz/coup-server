@@ -419,15 +419,14 @@ func TestGameClaimProof(t *testing.T) {
 
 	p1, p2 := &Player{Hand: Hand{0: CardCaptain}}, &Player{Hand: Hand{0: CardDuke}}
 	g, err := NewGame([5]*Player{p1, p2})
-
 	is.NoErr(err)
 
 	is.Equal(g.ClaimProof(2), ErrInvalidClaim)
 
-	g.Claim(&Claim{
+	is.NoErr(g.Claim(&Claim{
 		author:    p1,
 		character: CardCaptain,
-	})
+	}))
 
 	is.Equal(g.ClaimProof(64), ErrInvalidCharacter)
 	is.Equal(g.ClaimProof(CardCaptain), ErrInvalidClaimNotChallenged)
@@ -437,4 +436,46 @@ func TestGameClaimProof(t *testing.T) {
 	is.NoErr(g.ClaimProof(CardCaptain))
 	//is.Equal(g.ClaimProof(CardCaptain), ErrInvalidClaimProvenAlready)
 	is.Equal(g.ClaimProof(CardCaptain), ErrInvalidClaimProvenAlready)
+}
+
+func TestClaimWasProven(t *testing.T) {
+	is := is.New(t)
+	{
+		g := &Game{}
+		_, err := g.ClaimWasProven()
+		is.Equal(err, ErrInvalidGame)
+
+		g.claim = NewNotifier()
+
+		_, err = g.ClaimWasProven()
+		is.Equal(err, ErrInvalidClaim)
+	}
+
+	p1, p2 := &Player{Hand: Hand{0: CardCaptain}}, &Player{Hand: Hand{0: CardDuke}}
+
+	g, err := NewGame([5]*Player{p1, p2})
+	is.NoErr(err)
+
+	is.NoErr(g.Claim(&Claim{
+		author:    p1,
+		character: CardCaptain,
+	}))
+
+	_, err = g.ClaimWasProven()
+	is.Equal(err, ErrInvalidClaim)
+	is.NoErr(g.ClaimChallenge(p2))
+
+	_, err = g.ClaimWasProven()
+	is.Equal(err, ErrInvalidClaim)
+	is.NoErr(g.ClaimProof(CardCaptain))
+
+	val, err := g.ClaimWasProven()
+	is.NoErr(err)
+	is.True(val)
+
+	g.history[len(g.history)-1].Character = CardContessa
+
+	val, err = g.ClaimWasProven()
+	is.NoErr(err)
+	is.True(!val)
 }

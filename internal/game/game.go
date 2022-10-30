@@ -288,7 +288,7 @@ func (g *Game) ClaimProof(character uint8) error {
 	}
 
 	_, challenge := c.Results()
-	if challenge == nil || *challenge == false {
+	if challenge == nil || !*challenge {
 		return ErrInvalidClaimNotChallenged
 	}
 
@@ -308,6 +308,39 @@ func (g *Game) ClaimProof(character uint8) error {
 	})
 
 	return nil
+}
+
+// ClaimWasProven returns true, nil if the claim was proven. Else, it returns
+// false, nil. Or, in-case there wasn't any claim to begin with, it returns
+// false, InvalidClaim.
+func (g *Game) ClaimWasProven() (bool, error) {
+	c, err := g.ClaimGet()
+	if err != nil {
+		return false, err
+	}
+	if c == nil {
+		return false, ErrInvalidClaim
+	}
+
+	g.historyMtx.Lock()
+	defer g.historyMtx.Unlock()
+
+	if len(g.history) < 2 {
+		return false, ErrInvalidClaim
+	}
+
+	lastAction := g.history[len(g.history)-1]
+	beforeLastAction := g.history[len(g.history)-2]
+	if lastAction.Kind == ActionClaimProof &&
+		beforeLastAction.Kind == ActionClaimChallenge {
+		if beforeLastAction.Character == lastAction.Character {
+			return true, nil
+		} else {
+			return false, nil
+		}
+	}
+
+	return false, ErrInvalidClaim
 }
 
 // ClaimSubscribe is a function that returns the underlying Claim

@@ -59,6 +59,11 @@ func TestClaimWait(t *testing.T) {
 	is.True(c.waitCalled)
 
 	c.Wait()
+
+	c = &Claim{}
+	c.Challenge()
+
+	c.Wait()
 }
 
 func TestClaimPassOrChallenge(t *testing.T) {
@@ -165,4 +170,25 @@ func TestClaimChan(t *testing.T) {
 
 	is := is.New(t)
 	is.Equal(c.Chan(), nil)
+}
+
+func TestClaimAction(t *testing.T) {
+	c := &Claim{character: CardAmbassador}
+
+	newAction := func(id uint8, kind uint8, character uint8) Action {
+		return Action{
+			AuthorID:  id,
+			Kind:      kind,
+			Character: character,
+		}
+	}
+
+	is := is.New(t)
+	is.Equal(c.Action(0), newAction(0, ActionClaim, CardAmbassador))
+	c.Pass()
+	is.Equal(c.Action(0), newAction(0, ActionClaimPassed, CardAmbassador))
+
+	c = &Claim{character: CardAmbassador}
+	c.Challenge()
+	is.Equal(c.Action(0), newAction(0, ActionClaimChallenge, CardAmbassador))
 }

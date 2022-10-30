@@ -7,17 +7,19 @@ import (
 )
 
 var (
-	ErrInvalidCounterClaim  = fmt.Errorf("invalid counter claim")
-	ErrInvalidPlayer        = fmt.Errorf("invalid or dead player")
-	ErrInvalidCharacter     = fmt.Errorf("invalid character")
-	ErrInvalidParameters    = fmt.Errorf("invalid parameters")
-	ErrInvalidAction        = fmt.Errorf("invalid action")
-	ErrInvalidActionFrozen  = fmt.Errorf("cannot create action because it is frozen by a claim")
-	ErrInvalidPlayerAmount  = fmt.Errorf("players must be 2 to 5")
-	ErrInvalidClaim         = fmt.Errorf("invalid claim")
-	ErrInvalidClaimFinished = fmt.Errorf("claim has already finished")
-	ErrInvalidArr           = fmt.Errorf("array is either nil or is empty")
-	ErrInvalidGame          = fmt.Errorf("game was not initiated properly")
+	ErrInvalidCounterClaim       = fmt.Errorf("invalid counter claim")
+	ErrInvalidPlayer             = fmt.Errorf("invalid or dead player")
+	ErrInvalidCharacter          = fmt.Errorf("invalid character")
+	ErrInvalidParameters         = fmt.Errorf("invalid parameters")
+	ErrInvalidAction             = fmt.Errorf("invalid action")
+	ErrInvalidActionFrozen       = fmt.Errorf("cannot create action because it is frozen by a claim")
+	ErrInvalidPlayerAmount       = fmt.Errorf("players must be 2 to 5")
+	ErrInvalidClaim              = fmt.Errorf("invalid claim")
+	ErrInvalidClaimFinished      = fmt.Errorf("claim has already finished")
+	ErrInvalidClaimNotChallenged = fmt.Errorf("claim has not been challenge")
+	ErrInvalidClaimProvenAlready = fmt.Errorf("claim has been proven already")
+	ErrInvalidArr                = fmt.Errorf("array is either nil or is empty")
+	ErrInvalidGame               = fmt.Errorf("game was not initiated properly")
 )
 
 // Game is a data structure that essentially connects all the loose data
@@ -267,6 +269,43 @@ func (g *Game) ClaimChallenge(challenger *Player) error {
 	})
 
 	c.Challenge()
+
+	return nil
+}
+
+// ClaimProof adds the claim proof if the claim was challenged.
+func (g *Game) ClaimProof(character uint8) error {
+	c, err := g.ClaimGet()
+	if err != nil {
+		return err
+	}
+	if c == nil {
+		return ErrInvalidClaim
+	}
+
+	if !IsValidCard(character) {
+		return ErrInvalidCharacter
+	}
+
+	_, challenge := c.Results()
+	if challenge == nil || *challenge == false {
+		return ErrInvalidClaimNotChallenged
+	}
+
+	g.historyMtx.Lock()
+	defer g.historyMtx.Unlock()
+
+	act := g.history[len(g.history)-1]
+	if act.Kind == ActionClaimProof {
+		return ErrInvalidClaimProvenAlready
+	}
+
+	g.history = append(g.history, Action{
+		AuthorID:  act.AuthorID,
+		AgainstID: act.AgainstID,
+		Kind:      ActionClaimProof,
+		Character: character,
+	})
 
 	return nil
 }

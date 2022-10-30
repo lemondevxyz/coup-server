@@ -409,3 +409,32 @@ func TestGameClaimChallenge(t *testing.T) {
 	is.Equal(g.ClaimChallenge(&Player{}), ErrInvalidPlayer)
 	is.Equal(g.ClaimChallenge(pl2), nil)
 }
+
+func TestGameClaimProof(t *testing.T) {
+	is := is.New(t)
+	{
+		g := &Game{}
+		is.Equal(g.ClaimProof(2), ErrInvalidGame)
+	}
+
+	p1, p2 := &Player{Hand: Hand{0: CardCaptain}}, &Player{Hand: Hand{0: CardDuke}}
+	g, err := NewGame([5]*Player{p1, p2})
+
+	is.NoErr(err)
+
+	is.Equal(g.ClaimProof(2), ErrInvalidClaim)
+
+	g.Claim(&Claim{
+		author:    p1,
+		character: CardCaptain,
+	})
+
+	is.Equal(g.ClaimProof(64), ErrInvalidCharacter)
+	is.Equal(g.ClaimProof(CardCaptain), ErrInvalidClaimNotChallenged)
+
+	is.NoErr(g.ClaimChallenge(p2))
+
+	is.NoErr(g.ClaimProof(CardCaptain))
+	//is.Equal(g.ClaimProof(CardCaptain), ErrInvalidClaimProvenAlready)
+	is.Equal(g.ClaimProof(CardCaptain), ErrInvalidClaimProvenAlready)
+}

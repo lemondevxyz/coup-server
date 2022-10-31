@@ -200,10 +200,11 @@ type Action struct {
 }
 
 var (
-	ErrInvalidActionAuthor  = fmt.Errorf("author: %w", ErrInvalidPlayer)
-	ErrInvalidActionAgainst = fmt.Errorf("against: %w", ErrInvalidPlayer)
-	ErrInvalidActionPlace   = fmt.Errorf("place must be [0, 1]")
-	ErrInvalidActionKind    = fmt.Errorf("kind cannot be zero or bigger than ActionCharacter unless it is ActionClaimPunishment")
+	ErrInvalidActionAuthor     = fmt.Errorf("author: %w", ErrInvalidPlayer)
+	ErrInvalidActionAgainst    = fmt.Errorf("against: %w", ErrInvalidPlayer)
+	ErrInvalidActionSamePlayer = fmt.Errorf("author and against are the same player")
+	ErrInvalidActionPlace      = fmt.Errorf("place must be [0, 1]")
+	ErrInvalidActionKind       = fmt.Errorf("kind cannot be zero or bigger than ActionCharacter unless it is ActionClaimPunishment")
 )
 
 func (a Action) IsValid() error {
@@ -223,7 +224,7 @@ func (a Action) IsValid() error {
 		}
 	}
 
-	if a.Kind == 0 || a.Kind > ActionCharacter && a.Kind != ActionClaimPunishment {
+	if (a.Kind == 0 || a.Kind > ActionCharacter) && a.Kind != ActionClaimPunishment {
 		return ErrInvalidActionKind
 	}
 
@@ -259,6 +260,48 @@ func (a *Action) do() {
 	case ActionClaimPunishment:
 		a.against.Hand = ClaimPunishmentAction(*a.AssassinPlace, a.against.Hand)
 	}
+}
+
+// setPlayer tries to find the players via AuthorID and AgainstID and sets
+// action and against to the players it found respectively.
+func (a *Action) setPlayer(players []*Player) error {
+	index := a.AuthorID
+	if int(index) >= len(players) || players[index] == nil {
+		return ErrInvalidActionAuthor
+	}
+	a.author = players[index]
+
+	if a.AgainstID != nil {
+		index := *a.AgainstID
+		if int(index) >= len(players) || players[index] == nil {
+			return ErrInvalidActionAgainst
+		}
+
+		if a.author == players[index] {
+			return ErrInvalidActionSamePlayer
+		}
+
+		a.against = players[index]
+	}
+
+	return nil
+}
+
+func (a Action) validClaim(c *claim) error {
+	if c == nil {
+		return ErrInvalidClaim
+	} else if !c.IsFinished() {
+		return ErrInvalidClaimHasNotFinished
+	}
+
+	succeed, challenge := c.Results()
+	if succeed == nil && challenge != nil {
+		return ErrInvalidActionFrozen
+	} else if a.Character != c.character {
+		return ErrInvalidCharacter
+	}
+
+	return nil
 }
 
 func IsValidCounterAction(a Action, b Action) bool {

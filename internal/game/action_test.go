@@ -330,6 +330,46 @@ func TestActionValid(t *testing.T) {
 	is.NoErr(a.IsValid())
 }
 
+func TestActionSetPlayers(t *testing.T) {
+	a := &Action{}
+	a.AuthorID = 255
+	pl1, pl2 := &Player{}, &Player{}
+
+	is := is.New(t)
+	is.Equal(a.setPlayer([]*Player{pl1}), ErrInvalidActionAuthor)
+
+	a.AuthorID = 0
+	is.Equal(a.setPlayer([]*Player{nil}), ErrInvalidActionAuthor)
+	is.NoErr(a.setPlayer([]*Player{pl1}))
+	is.Equal(a.author, pl1)
+
+	val := uint8(255)
+	a.AgainstID = &val
+
+	is.Equal(a.setPlayer([]*Player{pl1, pl2}), ErrInvalidActionAgainst)
+	val = 1
+	a.AgainstID = &val
+
+	is.Equal(a.setPlayer([]*Player{pl1, nil}), ErrInvalidActionAgainst)
+	is.Equal(a.setPlayer([]*Player{pl1, pl1}), ErrInvalidActionSamePlayer)
+	is.NoErr(a.setPlayer([]*Player{pl1, pl2}))
+
+	is.Equal(a.against, pl2)
+}
+
+func TestActionValidClaim(t *testing.T) {
+	is := is.New(t)
+
+	a := Action{}
+
+	is.Equal(a.validClaim(nil), ErrInvalidClaim)
+	is.Equal(a.validClaim(&claim{}), ErrInvalidClaimHasNotFinished)
+	is.Equal(a.validClaim(&claim{challenge: new(bool)}), ErrInvalidActionFrozen)
+	is.Equal(a.validClaim(&claim{succeed: new(bool), character: 1}), ErrInvalidCharacter)
+
+	is.NoErr(a.validClaim(&claim{succeed: new(bool), character: 0}))
+}
+
 func TestIsValidCounterAction(t *testing.T) {
 	is := is.New(t)
 
@@ -345,4 +385,6 @@ func TestIsValidCounterAction(t *testing.T) {
 		Kind:      ActionCharacter,
 		Character: CardContessa,
 	}), IsValidCounterClaim(CardAssassin, CardContessa))
+
+	is.True(!IsValidCounterAction(Action{Kind: ActionIncome}, Action{Kind: ActionIncome}))
 }

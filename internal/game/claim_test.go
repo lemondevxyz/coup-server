@@ -17,7 +17,7 @@ func TestIsValidCounterClaim(t *testing.T) {
 
 func TestClaimValid(t *testing.T) {
 	is := is.New(t)
-	c := Claim{author: &Player{Hand: Hand{CardAssassin, CardEmpty}}, character: CardAssassin}
+	c := claim{author: &Player{Hand: Hand{CardAssassin, CardEmpty}}, character: CardAssassin}
 	is.NoErr(c.IsValid())
 	c.author = &Player{}
 	is.Equal(c.IsValid(), ErrInvalidPlayer)
@@ -30,21 +30,25 @@ func TestNewClaim(t *testing.T) {
 	is := is.New(t)
 	_, err := NewClaim(nil, 0)
 	is.True(err != nil)
+
+	_, err = NewClaim(&Player{Hand: Hand{0: CardCaptain}}, CardContessa)
+	is.NoErr(err)
 }
 
 func TestClaimIsFinished(t *testing.T) {
 	is := is.New(t)
-	c := &Claim{}
+	c := &claim{}
 
 	is.Equal(c.IsFinished(), false)
 	pntr := false
 
-	is.Equal((&Claim{succeed: &pntr}).IsFinished(), true)
-	is.Equal((&Claim{challenge: &pntr}).IsFinished(), true)
+	is.Equal((&claim{succeed: &pntr}).IsFinished(), true)
+	is.Equal((&claim{challenge: &pntr}).IsFinished(), true)
 }
 
+/*
 func TestClaimWait(t *testing.T) {
-	c := &Claim{}
+	c := &claim{}
 	v := make(chan struct{})
 	go func() {
 		time.Sleep(time.Millisecond)
@@ -60,25 +64,20 @@ func TestClaimWait(t *testing.T) {
 
 	c.Wait()
 
-	c = &Claim{}
+	c = &claim{}
 	c.Challenge()
 
 	c.Wait()
 }
+*/
 
 func TestClaimPassOrChallenge(t *testing.T) {
 	is := is.New(t)
 
-	c := &Claim{}
-	c.waitCalled = true
-	c.wg.Add(1)
+	c := &claim{}
+	//c.wg.Add(1)
 
-	var val *bool
-	go func() {
-		time.Sleep(time.Millisecond)
-		val = c.passOrChallenge()
-	}()
-	c.wg.Wait()
+	val := c.passOrChallenge()
 
 	is.True(val != nil)
 	c.challenge = val
@@ -86,22 +85,18 @@ func TestClaimPassOrChallenge(t *testing.T) {
 }
 
 func TestClaimPassOrChallengeWait(t *testing.T) {
-	c := &Claim{}
+	c := &claim{}
 	go func() {
 		time.Sleep(time.Millisecond)
 		c.passOrChallenge()
 	}()
-	c.Wait()
+	//c.Wait()
 }
 
 func TestClaimChallenge(t *testing.T) {
-	c := &Claim{}
-	go func() {
-		time.Sleep(time.Millisecond)
-		c.Challenge()
-	}()
-	c.Wait()
+	c := &claim{}
 
+	c.Challenge()
 	is := is.New(t)
 	is.True(c.challenge != nil)
 
@@ -111,12 +106,8 @@ func TestClaimChallenge(t *testing.T) {
 }
 
 func TestClaimPass(t *testing.T) {
-	c := &Claim{}
-	go func() {
-		time.Sleep(time.Millisecond)
-		c.Pass()
-	}()
-	c.Wait()
+	c := &claim{}
+	c.Pass()
 
 	is := is.New(t)
 	is.True(c.succeed != nil)
@@ -126,8 +117,18 @@ func TestClaimPass(t *testing.T) {
 	is.True(c.succeed != nil)
 }
 
+func TestClaimProve(t *testing.T) {
+	c := &claim{}
+
+	is := is.New(t)
+	c.Challenge()
+	c.Prove(false)
+	is.True(c.succeed != nil)
+	is.Equal(*c.succeed, false)
+}
+
 func TestClaimResults(t *testing.T) {
-	c := &Claim{}
+	c := &claim{}
 	is := is.New(t)
 
 	passed, challenge := c.Results()
@@ -151,8 +152,9 @@ func TestClaimResults(t *testing.T) {
 	is.True(*challenge == false)
 }
 
+/*
 func TestClaimChan(t *testing.T) {
-	c := &Claim{}
+	c := &claim{}
 
 	go func() {
 		time.Sleep(time.Millisecond)
@@ -171,9 +173,10 @@ func TestClaimChan(t *testing.T) {
 	is := is.New(t)
 	is.Equal(c.Chan(), nil)
 }
+*/
 
 func TestClaimAction(t *testing.T) {
-	c := &Claim{character: CardAmbassador}
+	c := &claim{character: CardAmbassador}
 
 	newAction := func(id uint8, kind uint8, character uint8) Action {
 		return Action{
@@ -188,7 +191,9 @@ func TestClaimAction(t *testing.T) {
 	c.Pass()
 	is.Equal(c.Action(0), newAction(0, ActionClaimPassed, CardAmbassador))
 
-	c = &Claim{character: CardAmbassador}
+	c = &claim{character: CardAmbassador}
 	c.Challenge()
 	is.Equal(c.Action(0), newAction(0, ActionClaimChallenge, CardAmbassador))
+	c.succeed = c.challenge
+	is.Equal(c.Action(0), newAction(0, ActionClaimProof, CardAmbassador))
 }

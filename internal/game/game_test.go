@@ -42,139 +42,51 @@ func TestNewGame(t *testing.T) {
 	is.Equal(g.max, 2)
 }
 
-/*
-func TestAddClaim(t *testing.T) {
-	c := &Claim{}
-	_, err := addClaim([]*Claim{}, c)
-
-	is := is.New(t)
-	is.Equal(err, c.IsValid())
-
-	val, err := addClaim(nil, nil)
-	is.Equal(val, nil)
-	is.Equal(err, ErrInvalidParameters)
-	player := &Player{Hand: Hand{CardAssassin, CardContessa}}
-	c, err = NewClaim(player, CardAssassin)
-	is.NoErr(err)
-
-	newc, err := NewClaim(player, CardAssassin)
-	is.NoErr(err)
-
-	_, err = addClaim([]*Claim{c}, newc)
-	is.Equal(err, ErrInvalidCounterClaim)
-
-	arr, err := addClaim([]*Claim{}, c)
-	is.NoErr(err)
-	is.Equal([]*Claim{c}, arr)
-}
-*/
-
 func TestGameAction(t *testing.T) {
 	g, err := NewGame([5]*Player{{Hand: Hand{CardAmbassador, CardAssassin}}, {Hand: Hand{CardDuke, CardContessa}}})
 
 	is := is.New(t)
 	is.NoErr(err)
 
-	a1, a2 := &Action{}, &Action{}
-	{
-		g := &Game{}
-		is.Equal(g.Action(a1), ErrInvalidActionAuthor)
-	}
-	a1.AuthorID, a2.AuthorID = 0, 0
-	a1.Kind, a2.Kind = ActionIncome, ActionIncome
+	a1, a2 := Action{}, Action{}
+	a1.AuthorID = 255
 
-	is.True(g.Action(nil) == ErrInvalidAction)
-
-	a1.AuthorID = 4
-	is.Equal(g.Action(a1), ErrInvalidActionAuthor)
+	is.Equal(g.Action(a1), a1.setPlayer(g.players[:]))
 
 	a1.AuthorID = 0
+	a1.setPlayer(g.players[:])
+	is.Equal(g.Action(a1), a1.IsValid())
 
-	v := uint8(4)
-	a1.AgainstID = &v
-	is.Equal(g.Action(a1), ErrInvalidActionAgainst)
-	*a1.AgainstID = 1
+	g.claim = &claim{}
 
-	is.NoErr(g.Action(a1))
-	is.Equal(a1.against, g.players[1])
+	a1.Kind = ActionCharacter
+	is.Equal(g.Action(a1), a1.validClaim(g.claim))
 
-	g.claim = nil
-	is.Equal(g.Action(a1), ErrInvalidGame)
-	g.claim = NewNotifier()
+	a1.Kind = ActionCharacter
+	g.claim = &claim{character: CardContessa}
+	g.claim.succeed, g.claim.challenge = new(bool), new(bool)
+	a1.Character = CardContessa
 
-	g.action[0], g.history = nil, []Action{}
-	a1.Kind = 54
 	is.Equal(g.Action(a1), ErrInvalidActionKind)
 
-	boolval := true
-	g.claim.Set(&Claim{
-		challenge: &boolval,
-	})
+	g.claim = nil
 
-	a1.Kind = ActionIncome
-	is.Equal(g.Action(a1), ErrInvalidActionFrozen)
-
-	g.claim.Set(&Claim{
-		succeed: &boolval,
-	})
-
+	a1.Kind = ActionFinancialAid
 	is.NoErr(g.Action(a1))
-	c, _ := g.ClaimGet()
-	is.Equal(c, nil)
-	g.history, g.action[0] = []Action{}, nil
 
-	g.claim.Set(&Claim{})
-	is.Equal(g.Action(a1), ErrInvalidActionFrozen)
+	is.Equal(g.Action(Action{AuthorID: 1, Kind: ActionIncome}), ErrInvalidCounterClaim)
 
-	g.claim.Set(nil)
+	g.claim = &claim{}
+	g.claim.succeed = new(bool)
+	*g.claim.succeed = true
+	g.claim.character = CardDuke
 
-	is.NoErr(g.Action(a1))
-	is.Equal(a1, g.action[0])
-
-	is.Equal(g.history[0], *g.action[0])
-
-	is.Equal(g.Action(a2), ErrInvalidCounterClaim)
-
-	g.action[0].Kind = ActionFinancialAid
 	a2.Kind = ActionCharacter
-	a2.Character = CardDuke
+	a2.Character = g.claim.character
 
 	is.NoErr(g.Action(a2))
-	is.Equal(a2, g.action[1])
-	is.Equal(g.history[1], *g.action[1])
 	is.Equal(g.Action(a2), ErrInvalidAction)
 
-	g.action[0].Kind = ActionCharacter
-	g.action[0].Character = CardAssassin
-	a2.Character = CardContessa
-
-	is.Equal(g.Action(a2), ErrInvalidAction)
-}
-
-func TestGameDoAction(t *testing.T) {
-	g := &Game{}
-
-	is := is.New(t)
-
-	err := g.DoAction()
-	is.Equal(err, ErrInvalidAction)
-
-	act := &Action{Character: CardDuke}
-	act.Kind = ActionCharacter
-	act.author = &Player{Hand: Hand{CardAmbassador, CardDuke}}
-
-	g.action = [2]*Action{act, nil}
-	is.NoErr(g.DoAction())
-
-	is.Equal(act.author.Coins, uint8(3))
-	is.Equal(g.action[0], nil)
-
-	g.action = [2]*Action{nil, act}
-	is.NoErr(g.DoAction())
-
-	is.Equal(act.author.Coins, uint8(6))
-	is.Equal(g.action[0], nil)
-	is.Equal(g.action[1], nil)
 }
 
 func TestGameNextTurn(t *testing.T) {
@@ -207,73 +119,6 @@ func TestGameNextTurn(t *testing.T) {
 	}
 }
 
-func TestGameClaim(t *testing.T) {
-	g := &Game{}
-
-	is := is.New(t)
-	_, _, err := g.ClaimSubscribe()
-	is.Equal(err, ErrInvalidGame)
-
-	g.claim = NewNotifier()
-
-	_, ch, err := g.ClaimSubscribe()
-	is.NoErr(err)
-
-	wait := make(chan struct{})
-
-	go func() {
-		val := <-ch
-		wait <- val
-	}()
-
-	is.True(g.Claim(&Claim{}) != nil)
-
-	pl := &Player{Hand: Hand{0: CardContessa}}
-
-	c, err := NewClaim(pl, CardContessa)
-	is.NoErr(err)
-	is.True(g.Claim(c) == ErrInvalidPlayer)
-
-	g.players = [5]*Player{pl}
-
-	c.Pass()
-	is.True(g.Claim(c) == ErrInvalidClaimFinished)
-
-	c.succeed = nil
-	is.NoErr(g.Claim(c))
-	is.Equal(c.Action(0), g.history[0])
-
-	select {
-	case <-wait:
-	case <-time.After(time.Millisecond):
-		t.Fatalf("g.Claim doesn't notify subscribers")
-	}
-}
-
-func TestGameClaimGet(t *testing.T) {
-	g := &Game{}
-	g.claim = NewNotifier()
-	c := &Claim{}
-	g.claim.Set(c)
-
-	is := is.New(t)
-
-	newc, err := g.ClaimGet()
-	is.NoErr(err)
-	is.Equal(newc, c)
-}
-
-func TestGameClaimUnsubscribe(t *testing.T) {
-	g := &Game{}
-
-	is := is.New(t)
-	is.Equal(g.ClaimUnsubscribe(time.Time{}), ErrInvalidGame)
-
-	g.claim = NewNotifier()
-	g.claim.chnls[time.Time{}] = nil
-	is.NoErr(g.ClaimUnsubscribe(time.Time{}))
-}
-
 func TestGameTurnGet(t *testing.T) {
 	is := is.New(t)
 
@@ -301,7 +146,7 @@ func TestGameTurnUnsubscribe(t *testing.T) {
 }
 
 func TestValidateClaimAndItsPlayer(t *testing.T) {
-	_, err := validateClaimAndItsPlayer(nil, &Claim{})
+	_, err := validateClaimAndItsPlayer(nil, &claim{})
 
 	is := is.New(t)
 	is.Equal(err, ErrInvalidArr)
@@ -316,166 +161,140 @@ func TestValidateClaimAndItsPlayer(t *testing.T) {
 	other := &Player{}
 
 	arr = append(arr, player)
-	_, err = validateClaimAndItsPlayer(arr, &Claim{
+	_, err = validateClaimAndItsPlayer(arr, &claim{
 		author: other,
 	})
 	is.Equal(err, ErrInvalidPlayer)
 
-	index, err := validateClaimAndItsPlayer(arr, &Claim{
+	index, err := validateClaimAndItsPlayer(arr, &claim{
 		author: player,
 	})
 	is.Equal(index, 0)
 	is.Equal(err, nil)
 }
 
+func TestGameClaim(t *testing.T) {
+	g, err := NewGame([5]*Player{{Hand: Hand{CardAmbassador, CardAssassin}}, {Hand: Hand{CardDuke, CardContessa}}})
+	is := is.New(t)
+	is.NoErr(err)
+
+	g.claim = &claim{}
+	is.Equal(g.Claim(nil, 0), ErrInvalidClaimOngoing)
+
+	g.claim = nil
+	is.Equal(g.Claim(nil, CardContessa), (&claim{}).IsValid())
+	is.Equal(g.Claim(&Player{Hand: Hand{0: CardContessa}}, CardContessa), ErrInvalidPlayer)
+
+	is.Equal(g.Claim(g.players[0], CardAmbassador), nil)
+	is.True(g.claim != nil)
+	is.Equal(g.history[0], g.claim.Action(0))
+}
+
 func TestGameClaimPass(t *testing.T) {
+	g, err := NewGame([5]*Player{{Hand: Hand{CardAmbassador, CardAssassin}}, {Hand: Hand{CardDuke, CardContessa}}})
+
+	is := is.New(t)
+	is.NoErr(err)
+
+	is.Equal(g.ClaimPass(), ErrInvalidClaim)
+	g.claim = &claim{succeed: new(bool)}
+
+	is.Equal(g.ClaimPass(), ErrInvalidClaimFinished)
+
+	g.claim.succeed = nil
+	g.claim.author = g.players[0]
+
+	is.NoErr(g.ClaimPass())
+	is.Equal(g.history[len(g.history)-1], g.claim.Action(0))
+	is.True(g.claim.succeed != nil)
+}
+
+func TestGameClaimChallenge(t *testing.T) {
+	g, err := NewGame([5]*Player{{Hand: Hand{CardAmbassador, CardAssassin}}, {Hand: Hand{CardDuke, CardContessa}}})
+
+	is := is.New(t)
+	is.NoErr(err)
+
+	is.Equal(g.ClaimChallenge(g.players[1]), ErrInvalidClaim)
+	g.claim = &claim{succeed: new(bool)}
+
+	is.Equal(g.ClaimChallenge(g.players[1]), ErrInvalidClaimFinished)
+
+	g.claim.succeed = nil
+	g.claim.author = g.players[1]
+
+	is.Equal(g.ClaimChallenge(g.players[1]), ErrInvalidActionSamePlayer)
+
+	g.claim.author = g.players[0]
+	is.Equal(g.ClaimChallenge(&Player{}), ErrInvalidPlayer)
+
+	is.NoErr(g.ClaimChallenge(g.players[1]))
+
+	is.Equal(g.history[0].AuthorID, uint8(1))
+	is.Equal(*g.history[0].AgainstID, uint8(0))
+	is.True(g.claim.challenge != nil)
+}
+
+func TestGameClaimProve(t *testing.T) {
+	g, err := NewGame([5]*Player{{Hand: Hand{CardAmbassador, CardAssassin}}, {Hand: Hand{CardDuke, CardContessa}}})
+
+	is := is.New(t)
+	is.NoErr(err)
+
+	_, err = g.ClaimProve(CardContessa)
+	is.Equal(err, ErrInvalidClaim)
+	g.claim = &claim{}
+
+	_, err = g.ClaimProve(CardContessa)
+	is.Equal(err, ErrInvalidClaimHasNotFinished)
+
+	g.claim.succeed = new(bool)
+	_, err = g.ClaimProve(CardContessa)
+	is.Equal(err, ErrInvalidClaimNotChallenged)
+
+	g.claim = nil
+
+	g.Claim(g.players[0], CardContessa)
+	g.ClaimChallenge(g.players[1])
+
+	result, err := g.ClaimProve(CardContessa)
+
+	is.NoErr(err)
+	is.True(result)
+
+	is.Equal(g.history[len(g.history)-1].AuthorID, uint8(0))
+	is.Equal(*g.history[len(g.history)-1].AgainstID, uint8(1))
+
+	g.history = g.history[:len(g.history)-1]
+	g.claim.succeed = nil
+
+	result, err = g.ClaimProve(CardAssassin)
+	is.NoErr(err)
+	is.True(!result)
+}
+
+func TestGameDoAction(t *testing.T) {
+
 	is := is.New(t)
 
 	g := &Game{}
 
-	is.Equal(g.ClaimPass(), ErrInvalidGame)
-	g.claim = NewNotifier()
+	pl1, pl2 := &Player{}, &Player{}
 
-	g.claim.Set(&Claim{
-		succeed: new(bool),
-	})
+	g.action[1] = &Action{author: pl2, Kind: ActionIncome}
+	g.action[0] = &Action{author: pl1, Kind: ActionIncome}
 
-	is.Equal(g.ClaimPass(), ErrInvalidClaimFinished)
+	is.NoErr(g.DoAction())
 
-	g.players = [5]*Player{
-		0: {Hand: Hand{0: CardAmbassador}},
-	}
+	is.Equal(pl1.Coins, uint8(0))
+	is.Equal(pl2.Coins, uint8(1))
+	is.Equal(g.action[0], nil)
+	is.Equal(g.action[1], nil)
 
-	g.claim.Set(&Claim{})
+	g.action[0] = &Action{author: pl1, Kind: ActionIncome}
+	is.NoErr(g.DoAction())
+	is.Equal(pl1.Coins, uint8(1))
 
-	newc, err := g.ClaimGet()
-	is.NoErr(err)
-	index, err := g.validateClaimAndItsPlayer(newc)
+	is.Equal(g.DoAction(), ErrInvalidAction)
 
-	is.Equal(g.ClaimPass(), err)
-	g.claim.Set(&Claim{
-		author: g.players[0],
-	})
-
-	is.NoErr(g.ClaimPass())
-	t.Log(index, g.history[0])
-	is.Equal(g.history[0].AuthorID, uint8(0))
-}
-
-func TestGameClaimChallenge(t *testing.T) {
-	is := is.New(t)
-
-	{
-		g := &Game{}
-
-		_, err := g.ClaimGet()
-		is.Equal(g.ClaimChallenge(nil), err)
-	}
-
-	pl1, pl2 := &Player{Hand: Hand{0: CardAmbassador}}, &Player{Hand: Hand{1: CardCaptain}}
-
-	g, err := NewGame([5]*Player{pl1, pl2})
-
-	is.NoErr(err)
-	is.Equal(g.ClaimChallenge(nil), ErrInvalidClaim)
-
-	is.NoErr(g.Claim(&Claim{
-		author:    pl1,
-		character: CardAmbassador,
-	}))
-
-	c := &Claim{
-		author:    &Player{},
-		character: CardAmbassador,
-	}
-	g.claim.Set(c)
-
-	_, err = g.validateClaimAndItsPlayer(c)
-	is.Equal(g.ClaimChallenge(&Player{
-		Hand: Hand{0: CardAmbassador},
-	}), err)
-
-	c, err = g.ClaimGet()
-	is.NoErr(err)
-
-	c.Pass()
-	is.Equal(g.ClaimChallenge(&Player{}), ErrInvalidClaimFinished)
-
-	is.NoErr(g.Claim(&Claim{
-		author:    pl1,
-		character: CardAmbassador,
-	}))
-
-	is.Equal(g.ClaimChallenge(&Player{}), ErrInvalidPlayer)
-	is.Equal(g.ClaimChallenge(pl2), nil)
-}
-
-func TestGameClaimProof(t *testing.T) {
-	is := is.New(t)
-	{
-		g := &Game{}
-		is.Equal(g.ClaimProof(2), ErrInvalidGame)
-	}
-
-	p1, p2 := &Player{Hand: Hand{0: CardCaptain}}, &Player{Hand: Hand{0: CardDuke}}
-	g, err := NewGame([5]*Player{p1, p2})
-	is.NoErr(err)
-
-	is.Equal(g.ClaimProof(2), ErrInvalidClaim)
-
-	is.NoErr(g.Claim(&Claim{
-		author:    p1,
-		character: CardCaptain,
-	}))
-
-	is.Equal(g.ClaimProof(64), ErrInvalidCharacter)
-	is.Equal(g.ClaimProof(CardCaptain), ErrInvalidClaimNotChallenged)
-
-	is.NoErr(g.ClaimChallenge(p2))
-
-	is.NoErr(g.ClaimProof(CardCaptain))
-	//is.Equal(g.ClaimProof(CardCaptain), ErrInvalidClaimProvenAlready)
-	is.Equal(g.ClaimProof(CardCaptain), ErrInvalidClaimProvenAlready)
-}
-
-func TestClaimWasProven(t *testing.T) {
-	is := is.New(t)
-	{
-		g := &Game{}
-		_, err := g.ClaimWasProven()
-		is.Equal(err, ErrInvalidGame)
-
-		g.claim = NewNotifier()
-
-		_, err = g.ClaimWasProven()
-		is.Equal(err, ErrInvalidClaim)
-	}
-
-	p1, p2 := &Player{Hand: Hand{0: CardCaptain}}, &Player{Hand: Hand{0: CardDuke}}
-
-	g, err := NewGame([5]*Player{p1, p2})
-	is.NoErr(err)
-
-	is.NoErr(g.Claim(&Claim{
-		author:    p1,
-		character: CardCaptain,
-	}))
-
-	_, err = g.ClaimWasProven()
-	is.Equal(err, ErrInvalidClaim)
-	is.NoErr(g.ClaimChallenge(p2))
-
-	_, err = g.ClaimWasProven()
-	is.Equal(err, ErrInvalidClaim)
-	is.NoErr(g.ClaimProof(CardCaptain))
-
-	val, err := g.ClaimWasProven()
-	is.NoErr(err)
-	is.True(val)
-
-	g.history[len(g.history)-1].Character = CardContessa
-
-	val, err = g.ClaimWasProven()
-	is.NoErr(err)
-	is.True(!val)
 }

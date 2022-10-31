@@ -7,19 +7,21 @@ import (
 )
 
 var (
-	ErrInvalidCounterClaim       = fmt.Errorf("invalid counter claim")
-	ErrInvalidPlayer             = fmt.Errorf("invalid or dead player")
-	ErrInvalidCharacter          = fmt.Errorf("invalid character")
-	ErrInvalidParameters         = fmt.Errorf("invalid parameters")
-	ErrInvalidAction             = fmt.Errorf("invalid action")
-	ErrInvalidActionFrozen       = fmt.Errorf("cannot create action because it is frozen by a claim")
-	ErrInvalidPlayerAmount       = fmt.Errorf("players must be 2 to 5")
-	ErrInvalidClaim              = fmt.Errorf("invalid claim")
-	ErrInvalidClaimFinished      = fmt.Errorf("claim has already finished")
-	ErrInvalidClaimNotChallenged = fmt.Errorf("claim has not been challenge")
-	ErrInvalidClaimProvenAlready = fmt.Errorf("claim has been proven already")
-	ErrInvalidArr                = fmt.Errorf("array is either nil or is empty")
-	ErrInvalidGame               = fmt.Errorf("game was not initiated properly")
+	ErrInvalidCounterClaim        = fmt.Errorf("invalid counter claim")
+	ErrInvalidPlayer              = fmt.Errorf("invalid or dead player")
+	ErrInvalidCharacter           = fmt.Errorf("invalid character")
+	ErrInvalidParameters          = fmt.Errorf("invalid parameters")
+	ErrInvalidAction              = fmt.Errorf("invalid action")
+	ErrInvalidActionFrozen        = fmt.Errorf("cannot create action because it is frozen by a claim")
+	ErrInvalidPlayerAmount        = fmt.Errorf("players must be 2 to 5")
+	ErrInvalidClaim               = fmt.Errorf("invalid claim")
+	ErrInvalidClaimOngoing        = fmt.Errorf("claim is still on going")
+	ErrInvalidClaimHasNotFinished = fmt.Errorf("claim hasn't finished")
+	ErrInvalidClaimFinished       = fmt.Errorf("claim has already finished")
+	ErrInvalidClaimNotChallenged  = fmt.Errorf("claim has not been challenge")
+	ErrInvalidClaimProvenAlready  = fmt.Errorf("claim has been proven already")
+	ErrInvalidArr                 = fmt.Errorf("array is either nil or is empty")
+	ErrInvalidGame                = fmt.Errorf("game was not initiated properly")
 )
 
 // Game is a data structure that essentially connects all the loose data
@@ -34,18 +36,24 @@ var (
 // An Empty Game is invalid. Use NewGame to generate a new game.
 //
 // Do note: You are meant to have up keep of the slice of players when
-//          using Game. Since, much of Game's internal design relies
+//          using Game. Since much of Game's internal design relies
 //          heavily on an external package to translate client commands
 //          into game actions.
 type Game struct {
 	players    [5]*Player
 	turn       *Notifier
 	max        int
-	claim      *Notifier
+	claim      *claim
+	claimMtx   sync.Mutex
 	action     [2]*Action
 	actionMtx  sync.Mutex
 	history    []Action
 	historyMtx sync.Mutex
+}
+
+type gameClaim struct {
+	player    uint8
+	character uint8
 }
 
 // NewGame creates a new game via providing it with a slice of players.
@@ -67,9 +75,8 @@ func NewGame(pl [5]*Player) (*Game, error) {
 		return nil, ErrInvalidPlayerAmount
 	}
 
-	g.claim, g.turn = NewNotifier(), NewNotifier()
+	g.turn = NewNotifier()
 	g.turn.Set(0)
-	g.claim.Set(nil)
 
 	return g, nil
 }
@@ -112,7 +119,7 @@ func findPlayerByPntr(arr []*Player, player *Player) int {
 // players and a claim; it then checks if any of the parameters are
 // invalid and returns error; If not, it tries to locate the author in
 // claim and returns it index if found.
-func validateClaimAndItsPlayer(arr []*Player, c *Claim) (int, error) {
+func validateClaimAndItsPlayer(arr []*Player, c *claim) (int, error) {
 	if len(arr) == 0 {
 		return -1, ErrInvalidArr
 	}
@@ -130,7 +137,7 @@ func validateClaimAndItsPlayer(arr []*Player, c *Claim) (int, error) {
 
 // validateClaimAndItsPlayer is essentially a wrapper over the non-game
 // function validateClaimAndItsPlayer.
-func (g *Game) validateClaimAndItsPlayer(c *Claim) (int, error) {
+func (g *Game) validateClaimAndItsPlayer(c *claim) (int, error) {
 	return validateClaimAndItsPlayer(g.players[:], c)
 }
 
@@ -145,7 +152,7 @@ func (g *Game) addActionToHistory(a Action) {
 
 // addClaimToHistory is a wrapper around addActionToHistory and
 // Claim.Action.
-func (g *Game) addClaimToHistory(c *Claim, authorId uint8) {
+func (g *Game) addClaimToHistory(c *claim, authorId uint8) {
 	g.addActionToHistory(c.Action(authorId))
 }
 
@@ -179,215 +186,119 @@ func (g *Game) addClaimToHistory(c *Claim, authorId uint8) {
 // them. One could always counter-claim if the original Action is counterable.
 // Like, for example, an Assassin and a Contessa or a Captain and another
 // Captain.
-func (g *Game) Claim(c *Claim) error {
+func (g *Game) Claim(author *Player, character uint8) error {
+	g.claimMtx.Lock()
+	defer g.claimMtx.Unlock()
+	if g.claim != nil {
+		return ErrInvalidClaimOngoing
+	}
+
+	c := &claim{author: author, character: character}
 	if err := c.IsValid(); err != nil {
 		return err
 	}
 
-	if c.IsFinished() {
-		return ErrInvalidClaimFinished
-	}
-
 	index, err := g.validateClaimAndItsPlayer(c)
 	if err != nil {
 		return err
 	}
 
 	g.addClaimToHistory(c, uint8(index))
-
-	g.claim.Set(c)
-	g.claim.Announce()
+	g.claim = c
 
 	return nil
 }
 
-// ClaimPass is a function that makes the underlying claim pass.
-//
-// This makes the action of the claim succeed unless it is countered
-// by another claim.
-//
-// It is good practice to call ClaimPass after a duration has elapsed.
-//
-// It is also good practice to choose different durations at key points
-// of the game. For example, giving a player a 20 second duration to
-// validate a Claim at the end of a game, but giving them a 5 second
-// duration at the start of a game.
+// ClaimPass makes the underlying claim pass, allowing future character
+// actions to succeed.
 func (g *Game) ClaimPass() error {
-	c, err := g.ClaimGet()
-	if err != nil {
-		return err
-	}
-	if c.IsFinished() {
+	g.claimMtx.Lock()
+	defer g.claimMtx.Unlock()
+
+	if g.claim == nil {
+		return ErrInvalidClaim
+	} else if g.claim.IsFinished() {
 		return ErrInvalidClaimFinished
 	}
 
-	index, err := g.validateClaimAndItsPlayer(c)
-	if err != nil {
-		return err
-	}
+	index, _ := g.validateClaimAndItsPlayer(g.claim)
 
-	c.Pass()
-	g.addClaimToHistory(c, uint8(index))
+	g.claim.Pass()
+	g.addClaimToHistory(g.claim, uint8(index))
 
 	return nil
 }
 
-// ClaimChallenge challenges the current claim.
-//
-// After ClaimChallenge all subsequent calls to Action and DoAction are
-// frozen. They can be later made unfrozen through calling ClaimProof.
+// ClaimChallenge challenges the underlying claim. This function will freeze
+// any calls to Action until the Claim has been proven and the appropriate
+// player was punished.
 func (g *Game) ClaimChallenge(challenger *Player) error {
-	c, err := g.ClaimGet()
-	if err != nil {
-		return err
-	}
-	if c == nil {
+	g.claimMtx.Lock()
+	defer g.claimMtx.Unlock()
+
+	if g.claim == nil {
 		return ErrInvalidClaim
-	}
-
-	if c.IsFinished() {
+	} else if g.claim.IsFinished() {
 		return ErrInvalidClaimFinished
+	} else if g.claim.author == challenger {
+		return ErrInvalidActionSamePlayer
 	}
 
-	againstId, err := g.validateClaimAndItsPlayer(c)
-	if err != nil {
-		return err
-	}
-
-	authorId := findPlayerByPntr(g.players[:], challenger)
-	if authorId < 0 {
+	challengerIndex := findPlayerByPntr(g.players[:], challenger)
+	if challengerIndex < 0 {
 		return ErrInvalidPlayer
 	}
 
-	actionAgainstId := uint8(againstId)
+	index, _ := g.validateClaimAndItsPlayer(g.claim)
 
-	g.addActionToHistory(Action{
-		AuthorID:  uint8(authorId),
-		AgainstID: &actionAgainstId,
-		Kind:      ActionClaimChallenge,
-		Character: c.character,
-	})
+	historyItem := g.claim.Action(uint8(index))
 
-	c.Challenge()
+	val := historyItem.AuthorID
+	historyItem.AgainstID, historyItem.against = &val, historyItem.against
+	historyItem.AuthorID, historyItem.author = uint8(challengerIndex), challenger
 
-	return nil
-}
-
-// ClaimProof adds the claim proof if the claim was challenged.
-func (g *Game) ClaimProof(character uint8) error {
-	c, err := g.ClaimGet()
-	if err != nil {
-		return err
-	}
-	if c == nil {
-		return ErrInvalidClaim
-	}
-
-	if !IsValidCard(character) {
-		return ErrInvalidCharacter
-	}
-
-	_, challenge := c.Results()
-	if challenge == nil || !*challenge {
-		return ErrInvalidClaimNotChallenged
-	}
-
-	g.historyMtx.Lock()
-	defer g.historyMtx.Unlock()
-
-	act := g.history[len(g.history)-1]
-	if act.Kind == ActionClaimProof {
-		return ErrInvalidClaimProvenAlready
-	}
-
-	g.history = append(g.history, Action{
-		AuthorID:  act.AuthorID,
-		AgainstID: act.AgainstID,
-		Kind:      ActionClaimProof,
-		Character: character,
-	})
+	g.claim.Challenge()
+	g.addActionToHistory(historyItem)
 
 	return nil
 }
 
-// ClaimWasProven returns true, nil if the claim was proven. Else, it returns
-// false, nil. Or, in-case there wasn't any claim to begin with, it returns
-// false, InvalidClaim.
-func (g *Game) ClaimWasProven() (bool, error) {
-	c, err := g.ClaimGet()
-	if err != nil {
-		return false, err
-	}
-	if c == nil {
+// ClaimProve provides the challenged claim with proof. The proof could
+// be correct or incorrect, the result of this evaluation is stored in
+// the first parameter.
+//
+// If the proof matched the claim; the challenger gets punished; if not;
+// the claimant gets punished.
+func (g *Game) ClaimProve(character uint8) (bool, error) {
+	g.claimMtx.Lock()
+	defer g.claimMtx.Unlock()
+
+	if g.claim == nil {
 		return false, ErrInvalidClaim
+	} else if !g.claim.IsFinished() {
+		return false, ErrInvalidClaimHasNotFinished
+	} else if _, challenge := g.claim.Results(); challenge == nil {
+		return false, ErrInvalidClaimNotChallenged
 	}
+
+	originalCharacter := uint8(0)
 
 	g.historyMtx.Lock()
-	defer g.historyMtx.Unlock()
-
-	if len(g.history) < 2 {
-		return false, ErrInvalidClaim
-	}
 
 	lastAction := g.history[len(g.history)-1]
-	beforeLastAction := g.history[len(g.history)-2]
-	if lastAction.Kind == ActionClaimProof &&
-		beforeLastAction.Kind == ActionClaimChallenge {
-		if beforeLastAction.Character == lastAction.Character {
-			return true, nil
-		} else {
-			return false, nil
-		}
-	}
+	lastAction.Kind = ActionClaimProof
+	originalCharacter = lastAction.Character
+	lastAction.Character = character
+	lastAction.author, lastAction.against = lastAction.against, lastAction.author
+	againstId := lastAction.AuthorID
+	lastAction.AuthorID, lastAction.AgainstID = *lastAction.AgainstID, &againstId
+	g.history = append(g.history, lastAction)
+	g.historyMtx.Unlock()
 
-	return false, ErrInvalidClaim
-}
+	succeed := originalCharacter == character
+	g.claim.Prove(originalCharacter == character)
 
-// ClaimSubscribe is a function that returns the underlying Claim
-// Notifier Subscribe method.
-func (g *Game) ClaimSubscribe() (t time.Time, c <-chan struct{}, err error) {
-	defer func() {
-		if recover() != nil {
-			err = ErrInvalidGame
-		}
-	}()
-
-	t, c = g.claim.Subscribe()
-
-	return
-}
-
-// ClaimUnsubscribe is a function that returns the underlying Claim
-// Notifier Unsubscribe method.
-func (g *Game) ClaimUnsubscribe(val time.Time) (err error) {
-	defer func() {
-		if recover() != nil {
-			err = ErrInvalidGame
-		}
-	}()
-
-	g.claim.Unsubscribe(val)
-
-	return
-}
-
-// ClaimGet is a function that returns the underlying Claim Notifier Get
-// method but with one difference: The value return will always be a
-// pointer to a claim.
-func (g *Game) ClaimGet() (c *Claim, err error) {
-	defer func() {
-		if recover() != nil {
-			err = ErrInvalidGame
-		}
-	}()
-
-	if g.claim.Get() == nil {
-		c, err = nil, nil
-	} else {
-		c, err = g.claim.Get().(*Claim), nil
-	}
-
-	return
+	return succeed, nil
 }
 
 // Action is a function that sets a Game's underlying Action. Once an action
@@ -395,68 +306,45 @@ func (g *Game) ClaimGet() (c *Claim, err error) {
 //
 // If two actions have been set, in the same breath, before calling DoAction,
 // then DoAction only executes the last Action.
-func (g *Game) Action(a *Action) error {
-	if a == nil {
-		return ErrInvalidAction
-	}
-
-	index := a.AuthorID
-	if int(index) >= len(g.players) || g.players[index] == nil {
-		return ErrInvalidActionAuthor
-	}
-	a.author = g.players[index]
-
-	if a.AgainstID != nil {
-		index := *a.AgainstID
-		if int(index) >= len(g.players) || g.players[index] == nil {
-			return ErrInvalidActionAgainst
-		}
-
-		a.against = g.players[index]
+func (g *Game) Action(a Action) error {
+	if err := a.setPlayer(g.players[:]); err != nil {
+		return err
 	}
 
 	if err := a.IsValid(); err != nil {
 		return err
 	}
 
+	g.claimMtx.Lock()
+	c := g.claim
+	g.claimMtx.Unlock()
+	if c != nil {
+		if err := a.validClaim(c); err != nil {
+			return err
+		}
+
+		succeed, challenge := c.Results()
+		if succeed != nil && challenge != nil && a.Kind != ActionClaimPunishment {
+			return ErrInvalidActionKind
+		}
+	}
+
 	g.actionMtx.Lock()
 	defer g.actionMtx.Unlock()
 
-	c, err := g.ClaimGet()
-	if err != nil {
-		return err
-	}
-
-	if c != nil {
-		if c.IsFinished() {
-			_, challenge := c.Results()
-
-			if challenge != nil {
-				return ErrInvalidActionFrozen
-			} else {
-				g.claim.Set(nil)
-				g.claim.Announce()
-			}
-		} else {
-			return ErrInvalidActionFrozen
-		}
-	}
-
 	if g.action[0] == nil {
-		g.action[0] = a
+		g.action[0] = &Action{}
+		*g.action[0] = a
 	} else if g.action[1] == nil {
-		if !IsValidCounterAction(*g.action[0], *a) {
+		if !IsValidCounterAction(*g.action[0], a) {
 			return ErrInvalidCounterClaim
 		}
 
-		g.action[1] = a
+		g.action[1] = &Action{}
+		*g.action[1] = a
 	} else {
 		return ErrInvalidAction
 	}
-
-	g.historyMtx.Lock()
-	g.history = append(g.history, *a)
-	g.historyMtx.Unlock()
 
 	return nil
 }
@@ -466,13 +354,21 @@ func (g *Game) Action(a *Action) error {
 func (g *Game) DoAction() error {
 	g.actionMtx.Lock()
 	defer g.actionMtx.Unlock()
+
+	act := &Action{}
 	if g.action[1] != nil {
-		g.action[1].do()
+		act = g.action[1]
 	} else if g.action[0] != nil {
-		g.action[0].do()
+		act = g.action[0]
 	} else {
 		return ErrInvalidAction
 	}
+
+	g.historyMtx.Lock()
+	g.history = append(g.history, *act)
+	g.historyMtx.Unlock()
+
+	act.do()
 
 	g.action[0], g.action[1] = nil, nil
 

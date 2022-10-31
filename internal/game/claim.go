@@ -42,15 +42,12 @@ func IsValidCounterClaim(character, counter uint8) bool {
 // Note: Claims should not be modified but instead used only once.
 //       Any counter claim, used to defend the player, should be done
 //       through creating another claim.
-type Claim struct {
-	author     *Player
-	character  uint8
-	succeed    *bool
-	challenge  *bool
-	wg         sync.WaitGroup
-	mtx        sync.Mutex
-	once       sync.Once
-	waitCalled bool
+type claim struct {
+	author    *Player
+	character uint8
+	succeed   *bool
+	challenge *bool
+	mtx       sync.Mutex
 }
 
 // NewClaim is a function that creates a valid Claim or return an error.
@@ -59,8 +56,8 @@ type Claim struct {
 // NewClaim uses Claim.IsValid() to check the validity of the claim.
 //
 // An empty claim is always invalid.
-func NewClaim(player *Player, character uint8) (*Claim, error) {
-	c := &Claim{author: player, character: character}
+func NewClaim(player *Player, character uint8) (*claim, error) {
+	c := &claim{author: player, character: character}
 	if err := c.IsValid(); err != nil {
 		return nil, err
 	}
@@ -75,7 +72,7 @@ func NewClaim(player *Player, character uint8) (*Claim, error) {
 //
 // The underlying functions are Player.IsDead() and IsValidCard() for
 // the player and the card/character respectively.
-func (c *Claim) IsValid() error {
+func (c *claim) IsValid() error {
 	if c.author == nil || c.author.IsDead() {
 		return ErrInvalidPlayer
 	}
@@ -87,56 +84,13 @@ func (c *Claim) IsValid() error {
 	return nil
 }
 
-// Wait is a function that doesn't return until Claim.Pass() or
-// Claim.Challenge() has been called.
-//
-// If Claim.Challenge() or Claim.Pass() were called before Wait was called
-// then Wait returns immediately.
-//
-// Do note: Wait is only meant to be called once; Subsequent calls will
-//          return immediately.
-func (c *Claim) Wait() {
-	if c.IsFinished() {
-		return
-	}
-
-	c.once.Do(func() {
-		c.mtx.Lock()
-
-		c.wg.Add(1)
-		c.waitCalled = true
-		c.mtx.Unlock()
-
-		c.wg.Wait()
-	})
-}
-
-// Chan is a function that returns a channel that gets closed if
-// Claim.Pass() or Claim.Challenge() has been called.
-//
-// Do note: Chan() uses the function Wait() under the hood, so all of
-//          Wait()'s side-effects apply to Chan()
-func (c *Claim) Chan() chan struct{} {
-	if c.IsFinished() {
-		return nil
-	}
-
-	ch := make(chan struct{})
-	go func(c *Claim, ch chan struct{}) {
-		c.Wait()
-		close(ch)
-	}(c, ch)
-
-	return ch
-}
-
 // Results is a function that returns two values: passed & challenge.
 // Passed is only set if Claim.Pass() was called. Challenge is only set
 // if Claim.Challenge() was called.
 //
 // Do note: modification of these values won't impact the underlying
 // structure's value.
-func (c *Claim) Results() (passed *bool, challenge *bool) {
+func (c *claim) Results() (passed *bool, challenge *bool) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
@@ -155,7 +109,7 @@ func (c *Claim) Results() (passed *bool, challenge *bool) {
 
 // IsFinished is a function that returns if Pass() or Challenge()
 // have been called.
-func (c *Claim) IsFinished() bool {
+func (c *claim) IsFinished() bool {
 	if c.succeed != nil || c.challenge != nil {
 		return true
 	}
@@ -169,7 +123,7 @@ func (c *Claim) IsFinished() bool {
 //
 // passOrChallenge is mainly used to reduce code duplication between
 // Claim.Pass() and Claim.Challenge().
-func (c *Claim) passOrChallenge() *bool {
+func (c *claim) passOrChallenge() *bool {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	if c.IsFinished() {
@@ -177,25 +131,28 @@ func (c *Claim) passOrChallenge() *bool {
 	}
 	b := true
 
-	if c.waitCalled {
-		c.wg.Done()
-		c.waitCalled = false
-	}
-
 	return &b
 }
 
 // Challenge sets the Claim's challenge value to true unless Claim.Pass()
 // was called first.
-func (c *Claim) Challenge() {
+func (c *claim) Challenge() {
 	if val := c.passOrChallenge(); val != nil {
 		c.challenge = val
 	}
 }
 
+// Prove can only be called after Challenge has been called. Prove functions
+// as a proof to the challenge, whether it succeeded or not.
+func (c *claim) Prove(succeed bool) {
+	if val := c.passOrChallenge(); val == nil && c.challenge != nil {
+		c.succeed = &succeed
+	}
+}
+
 // Pass sets the Claim's pass value to true unless Claim.Pass() was
 // called first.
-func (c *Claim) Pass() {
+func (c *claim) Pass() {
 	if val := c.passOrChallenge(); val != nil {
 		c.succeed = val
 	}
@@ -203,20 +160,20 @@ func (c *Claim) Pass() {
 
 // Action returns an Action that's used to store a Claim in a history
 // array.
-func (c *Claim) Action(authorid uint8) Action {
+func (c *claim) Action(authorid uint8) Action {
 	a := Action{
 		AuthorID:  authorid,
 		Character: c.character,
 	}
 
-	if !c.IsFinished() {
-		a.Kind = ActionClaim
+	if c.succeed != nil && c.challenge != nil {
+		a.Kind = ActionClaimProof
+	} else if c.challenge != nil {
+		a.Kind = ActionClaimChallenge
+	} else if c.succeed != nil {
+		a.Kind = ActionClaimPassed
 	} else {
-		if c.challenge != nil {
-			a.Kind = ActionClaimChallenge
-		} else {
-			a.Kind = ActionClaimPassed
-		}
+		a.Kind = ActionClaim
 	}
 
 	return a

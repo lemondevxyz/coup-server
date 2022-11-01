@@ -52,9 +52,10 @@ func TestGameAction(t *testing.T) {
 	is.NoErr(a1.setPlayer(g.players[:]))
 	is.Equal(g.Action(a1), a1.IsValid())
 
+	a1.Kind = ActionCharacter
+	is.Equal(g.Action(a1), ErrInvalidAction)
 	g.claim = &claim{}
 
-	a1.Kind = ActionCharacter
 	is.Equal(g.Action(a1), a1.validClaim(g.claim))
 
 	a1.Kind = ActionCharacter
@@ -292,14 +293,19 @@ func TestGameDoAction(t *testing.T) {
 
 	is.Equal(g.DoAction(), ErrInvalidAction)
 
+	g.action[0] = &Action{author: pl1, Kind: ActionCharacter, Character: CardAmbassador, AmbassadorHand: Hand{CardContessa, CardContessa}}
+
+	is.NoErr(g.DoAction())
+	is.Equal(len(g.deck), 2)
+
 }
 
 func TestGenerateDeck(t *testing.T) {
 	is := is.New(t)
 
 	want, have := [15]uint8{}, [15]uint8{}
-	copy(want[:], shuffleCards(normalDeck[:]))
-	copy(have[:], shuffleCards(normalDeck[:]))
+	is.Equal(copy(want[:], shuffleCards(normalDeck[:])), 15)
+	is.Equal(copy(have[:], shuffleCards(normalDeck[:])), 15)
 
 	is.True(want != have)
 }
@@ -311,11 +317,11 @@ func TestGameShuffle(t *testing.T) {
 	is := is.New(t)
 
 	oldDeck, newDeck := [15]uint8{}, [15]uint8{}
-	copy(oldDeck[:], g.deck)
+	is.Equal(copy(oldDeck[:], g.deck), 15)
 
 	g.Shuffle()
 
-	copy(newDeck[:], g.deck)
+	is.Equal(15, copy(newDeck[:], g.deck))
 
 	is.True(oldDeck != newDeck)
 }
@@ -326,6 +332,9 @@ func TestGameDrawCards(t *testing.T) {
 
 	is := is.New(t)
 
-	is.Equal(len(g.DrawCards(2)), 2)
-	is.Equal(g.DrawCards(2), g.deck[:2])
+	drawn := g.DrawCards(2)
+	is.Equal(len(drawn), 2)
+	last := g.deck[:2]
+	is.Equal(drawn, last)
+	is.Equal(len(g.deck), 13)
 }

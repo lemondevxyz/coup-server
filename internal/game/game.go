@@ -356,6 +356,11 @@ func (g *Game) Action(a Action) error {
 	g.claimMtx.Lock()
 	c := g.claim
 	g.claimMtx.Unlock()
+
+	if a.Kind == ActionCharacter && c == nil {
+		return ErrInvalidAction
+	}
+
 	if c != nil {
 		if err := a.validClaim(c); err != nil {
 			return err
@@ -407,6 +412,14 @@ func (g *Game) DoAction() error {
 	g.historyMtx.Unlock()
 
 	act.do()
+
+	// An Ambassador *takes* cards away. So, we must return the cards back
+	// once they've finished.
+	if act.Kind == ActionCharacter && act.Character == CardAmbassador {
+		g.deckMtx.Lock()
+		g.deck = append(g.deck, act.AmbassadorHand[:]...)
+		g.deckMtx.Unlock()
+	}
 
 	g.action[0], g.action[1] = nil, nil
 
@@ -460,7 +473,7 @@ func (g *Game) TurnUnsubscribe(val time.Time) (err error) {
 	return
 }
 
-// Shuffle shuffles the game deck
+// Shuffle shuffles the Game's deck.
 func (g *Game) Shuffle() {
 	g.deckMtx.Lock()
 	g.deck = shuffleCards(g.deck)
@@ -472,5 +485,8 @@ func (g *Game) DrawCards(n uint8) []uint8 {
 	g.deckMtx.Lock()
 	defer g.deckMtx.Unlock()
 
-	return g.deck[:n]
+	arr := g.deck[:n]
+	g.deck = g.deck[n:]
+
+	return arr
 }

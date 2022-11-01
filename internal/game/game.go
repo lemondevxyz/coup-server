@@ -2,6 +2,7 @@ package game
 
 import (
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 )
@@ -40,6 +41,8 @@ var (
 //          heavily on an external package to translate client commands
 //          into game actions.
 type Game struct {
+	deck       []uint8
+	deckMtx    sync.Mutex
 	players    [5]*Player
 	turn       *Notifier
 	max        int
@@ -51,9 +54,31 @@ type Game struct {
 	historyMtx sync.Mutex
 }
 
-type gameClaim struct {
-	player    uint8
-	character uint8
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
+var normalDeck = [15]uint8{CardDuke, CardDuke, CardDuke,
+	CardContessa, CardContessa, CardContessa,
+	CardAssassin, CardAssassin, CardAssassin,
+	CardAmbassador, CardAmbassador, CardAmbassador,
+	CardCaptain, CardCaptain, CardCaptain}
+
+// Durstenfeld's version of the fisher-yates algorithm
+func shuffleCards(givenDeck []uint8) []uint8 {
+	// copy the normal deck
+	// deck := append([]uint8{}, normalDeck[:]...)
+	deck := append([]uint8{}, givenDeck...)
+
+	i := len(givenDeck) - 1
+	for i > 0 {
+		shuffledIndex := rand.Intn(15)
+
+		deck[shuffledIndex], deck[i] = deck[i], deck[shuffledIndex]
+		i--
+	}
+
+	return deck
 }
 
 // NewGame creates a new game via providing it with a slice of players.
@@ -62,12 +87,25 @@ type gameClaim struct {
 func NewGame(pl [5]*Player) (*Game, error) {
 	g := &Game{players: pl}
 
+	g.deck = shuffleCards(normalDeck[:])
+
 	for k, v := range pl {
 		if v != nil {
-			if v.IsDead() {
-				return nil, ErrInvalidPlayer
-			}
 			g.max = k + 1
+		} else {
+			first, second := g.deck[0], g.deck[1]
+			g.deck = g.deck[2:]
+
+			// simple way to tell the history, hey two cards were given..
+			// maybe, someday, this should be its own action instead of piggy
+			// backing off the Ambassador's only good use but that's for
+			// later discussion
+			g.history = append(g.history, Action{
+				Kind:            ActionCharacter,
+				Character:       CardAmbassador,
+				AmbassadorHand:  Hand{first, second},
+				AmbassadorPlace: Hand{0, 1},
+			})
 		}
 	}
 
@@ -254,7 +292,7 @@ func (g *Game) ClaimChallenge(challenger *Player) error {
 	historyItem := g.claim.Action(uint8(index))
 
 	val := historyItem.AuthorID
-	historyItem.AgainstID, historyItem.against = &val, historyItem.against
+	historyItem.AgainstID, historyItem.against = &val, historyItem.author
 	historyItem.AuthorID, historyItem.author = uint8(challengerIndex), challenger
 
 	g.claim.Challenge()
@@ -355,7 +393,7 @@ func (g *Game) DoAction() error {
 	g.actionMtx.Lock()
 	defer g.actionMtx.Unlock()
 
-	act := &Action{}
+	var act *Action
 	if g.action[1] != nil {
 		act = g.action[1]
 	} else if g.action[0] != nil {
@@ -420,4 +458,19 @@ func (g *Game) TurnUnsubscribe(val time.Time) (err error) {
 	g.turn.Unsubscribe(val)
 
 	return
+}
+
+// Shuffle shuffles the game deck
+func (g *Game) Shuffle() {
+	g.deckMtx.Lock()
+	g.deck = shuffleCards(g.deck)
+	g.deckMtx.Unlock()
+}
+
+// DrawCards draws cards from the Game's deck.
+func (g *Game) DrawCards(n uint8) []uint8 {
+	g.deckMtx.Lock()
+	defer g.deckMtx.Unlock()
+
+	return g.deck[:n]
 }

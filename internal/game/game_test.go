@@ -26,15 +26,10 @@ func TestNextTurn(t *testing.T) {
 }
 
 func TestNewGame(t *testing.T) {
-	p := &Player{}
-
-	_, err := NewGame([5]*Player{p})
-
 	is := is.New(t)
-	is.Equal(err, ErrInvalidPlayer)
 
-	p = &Player{Hand: Hand{0: CardAmbassador}}
-	_, err = NewGame([5]*Player{p})
+	p := &Player{Hand: Hand{0: CardAmbassador}}
+	_, err := NewGame([5]*Player{p})
 	is.Equal(err, ErrInvalidPlayerAmount)
 
 	g, err := NewGame([5]*Player{p, p})
@@ -54,7 +49,7 @@ func TestGameAction(t *testing.T) {
 	is.Equal(g.Action(a1), a1.setPlayer(g.players[:]))
 
 	a1.AuthorID = 0
-	a1.setPlayer(g.players[:])
+	is.NoErr(a1.setPlayer(g.players[:]))
 	is.Equal(g.Action(a1), a1.IsValid())
 
 	g.claim = &claim{}
@@ -187,7 +182,7 @@ func TestGameClaim(t *testing.T) {
 
 	is.Equal(g.Claim(g.players[0], CardAmbassador), nil)
 	is.True(g.claim != nil)
-	is.Equal(g.history[0], g.claim.Action(0))
+	is.Equal(g.history[len(g.history)-1], g.claim.Action(0))
 }
 
 func TestGameClaimPass(t *testing.T) {
@@ -230,8 +225,8 @@ func TestGameClaimChallenge(t *testing.T) {
 
 	is.NoErr(g.ClaimChallenge(g.players[1]))
 
-	is.Equal(g.history[0].AuthorID, uint8(1))
-	is.Equal(*g.history[0].AgainstID, uint8(0))
+	is.Equal(g.history[len(g.history)-1].AuthorID, uint8(1))
+	is.Equal(*g.history[len(g.history)-1].AgainstID, uint8(0))
 	is.True(g.claim.challenge != nil)
 }
 
@@ -254,8 +249,8 @@ func TestGameClaimProve(t *testing.T) {
 
 	g.claim = nil
 
-	g.Claim(g.players[0], CardContessa)
-	g.ClaimChallenge(g.players[1])
+	is.NoErr(g.Claim(g.players[0], CardContessa))
+	is.NoErr(g.ClaimChallenge(g.players[1]))
 
 	result, err := g.ClaimProve(CardContessa)
 
@@ -297,4 +292,40 @@ func TestGameDoAction(t *testing.T) {
 
 	is.Equal(g.DoAction(), ErrInvalidAction)
 
+}
+
+func TestGenerateDeck(t *testing.T) {
+	is := is.New(t)
+
+	want, have := [15]uint8{}, [15]uint8{}
+	copy(want[:], shuffleCards(normalDeck[:]))
+	copy(have[:], shuffleCards(normalDeck[:]))
+
+	is.True(want != have)
+}
+
+func TestGameShuffle(t *testing.T) {
+	g := &Game{}
+	g.deck = shuffleCards(normalDeck[:])
+
+	is := is.New(t)
+
+	oldDeck, newDeck := [15]uint8{}, [15]uint8{}
+	copy(oldDeck[:], g.deck)
+
+	g.Shuffle()
+
+	copy(newDeck[:], g.deck)
+
+	is.True(oldDeck != newDeck)
+}
+
+func TestGameDrawCards(t *testing.T) {
+	g := &Game{}
+	g.deck = shuffleCards(normalDeck[:])
+
+	is := is.New(t)
+
+	is.Equal(len(g.DrawCards(2)), 2)
+	is.Equal(g.DrawCards(2), g.deck[:2])
 }

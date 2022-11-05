@@ -332,9 +332,22 @@ func TestGameDrawCards(t *testing.T) {
 
 	is := is.New(t)
 
-	drawn := g.DrawCards(2)
-	is.Equal(len(drawn), 2)
 	last := g.deck[:2]
+	draw := g.DrawCards(2)
+	is.Equal(len(drawn), 2)
 	is.Equal(drawn, last)
 	is.Equal(len(g.deck), 13)
+}
+
+func TestGameReturnCards(t *testing.T) {
+	g := &Game{}
+	g.deck = []uint8{}
+
+	is := is.New(t)
+
+	arr := normalDeck[:]
+	is.Equal(g.ReturnCards(append(arr, 255)), ErrInvalidCharacter)
+
+	is.NoErr(g.ReturnCards(arr))
+	is.Equal(g.deck, arr)
 }

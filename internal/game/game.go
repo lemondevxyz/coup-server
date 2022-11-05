@@ -490,3 +490,19 @@ func (g *Game) DrawCards(n uint8) []uint8 {
 
 	return arr
 }
+
+// ReturnCards returns the slice of cards to the deck. It returns an error
+// if the one of the cards is invalid.
+func (g *Game) ReturnCards(arr []uint8) error {
+	for _, v := range arr {
+		if !IsValidCard(v) {
+			return ErrInvalidCharacter
+		}
+	}
+
+	g.deckMtx.Lock()
+	g.deck = append(g.deck, arr...)
+	g.deckMtx.Unlock()
+
+	return nil
+}
